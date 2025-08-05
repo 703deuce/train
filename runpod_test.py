@@ -1,7 +1,14 @@
 #!/usr/bin/env python3
 """
 RunPod Test Script for AI-Toolkit LoRA Training
-Configured for your specific RunPod endpoint with network storage
+Configured for RunPod endpoint with network storage
+
+Environment Variables Required:
+- RUNPOD_ENDPOINT: Your RunPod serverless endpoint URL
+- RUNPOD_API_KEY: Your RunPod API key  
+- HUGGINGFACE_TOKEN: Your HuggingFace access token
+
+If not set as environment variables, the script will prompt for them.
 """
 
 import os
@@ -11,10 +18,37 @@ import requests
 import time
 from pathlib import Path
 
-# Your RunPod configuration
-RUNPOD_ENDPOINT = "https://api.runpod.ai/v2/9r23v15ekm7ci4/run"
-RUNPOD_API_KEY = "rpa_C55TBQG7H6FM7G3Q7A6JM7ZJCDKA3I2J3EO0TAH8fxyddo"
-HUGGINGFACE_TOKEN = "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"
+# RunPod configuration - All set via environment variables
+RUNPOD_ENDPOINT = os.getenv("RUNPOD_ENDPOINT", "")
+RUNPOD_API_KEY = os.getenv("RUNPOD_API_KEY", "")
+HUGGINGFACE_TOKEN = os.getenv("HUGGINGFACE_TOKEN", "")
+
+def get_api_credentials():
+    """Get API credentials from environment or user input"""
+    global RUNPOD_ENDPOINT, RUNPOD_API_KEY, HUGGINGFACE_TOKEN
+    
+    # Check RunPod Endpoint
+    if not RUNPOD_ENDPOINT:
+        RUNPOD_ENDPOINT = input("Enter your RunPod Endpoint URL: ").strip()
+        if not RUNPOD_ENDPOINT:
+            print("❌ RunPod Endpoint URL is required")
+            return False
+    
+    # Check RunPod API Key
+    if not RUNPOD_API_KEY:
+        RUNPOD_API_KEY = input("Enter your RunPod API Key: ").strip()
+        if not RUNPOD_API_KEY:
+            print("❌ RunPod API Key is required")
+            return False
+    
+    # Check HuggingFace Token
+    if not HUGGINGFACE_TOKEN:
+        HUGGINGFACE_TOKEN = input("Enter your HuggingFace Token: ").strip()
+        if not HUGGINGFACE_TOKEN:
+            print("❌ HuggingFace Token is required")
+            return False
+    
+    return True
 
 def encode_zip_file(zip_path):
     """Encode the test.zip file to base64"""
@@ -227,6 +261,11 @@ def main():
     
     print("🚀 RunPod AI-Toolkit LoRA Training Test")
     print("=" * 50)
+    
+    # Get API credentials
+    if not get_api_credentials():
+        return
+    
     print(f"📂 Dataset: test.zip")
     print(f"🎯 Model: test_flux_lora_1000")
     print(f"📊 Steps: 1000")

@@ -437,6 +437,11 @@ class LoRATrainingHandler:
             os.environ["TRANSFORMERS_CACHE"] = flux_models_dir
             logger.info(f"Set HuggingFace cache to network storage: {flux_models_dir}")
         
+        # Ensure HF_TOKEN is available for diffusers
+        if not os.getenv("HF_TOKEN") and os.getenv("HUGGINGFACE_TOKEN"):
+            os.environ["HF_TOKEN"] = os.getenv("HUGGINGFACE_TOKEN")
+            logger.info("Set HF_TOKEN from HUGGINGFACE_TOKEN environment variable")
+        
         # Fallback to HuggingFace Hub paths (will download if authenticated)
         model_paths = {
             "flux1-dev": "black-forest-labs/FLUX.1-dev",
@@ -600,9 +605,18 @@ def handler(job):
         
         # Set up HuggingFace token if provided
         if "huggingface_token" in job_input:
-            os.environ["HF_TOKEN"] = job_input["huggingface_token"]
-            os.environ["HUGGING_FACE_HUB_TOKEN"] = job_input["huggingface_token"]
+            hf_token = job_input["huggingface_token"]
+            os.environ["HF_TOKEN"] = hf_token
+            os.environ["HUGGING_FACE_HUB_TOKEN"] = hf_token
+            os.environ["HF_HOME"] = CACHE_PATH  # Set cache directory
             logger.info("HuggingFace token configured")
+        elif os.getenv("HUGGINGFACE_TOKEN"):
+            # Use container environment variable if available
+            hf_token = os.getenv("HUGGINGFACE_TOKEN")
+            os.environ["HF_TOKEN"] = hf_token
+            os.environ["HUGGING_FACE_HUB_TOKEN"] = hf_token
+            os.environ["HF_HOME"] = CACHE_PATH
+            logger.info("Using HuggingFace token from container environment")
         
         # Initialize handler
         trainer = LoRATrainingHandler()

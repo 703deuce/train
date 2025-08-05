@@ -265,6 +265,7 @@ class LoRATrainingHandler:
                             "name_or_path": self._get_model_path(params["base_model"]),
                             "is_flux": True,
                             "quantize": params.get("fp8_base", False),
+                            "is_local": os.path.exists(self._get_model_path(params["base_model"])),
                         },
                         "sample": {
                             "enabled": True,
@@ -331,28 +332,49 @@ class LoRATrainingHandler:
         """Get the path for the base model, checking for cached versions first"""
         
         # Check for locally cached models in RunPod network storage
-        cached_model_paths = {
-            "flux1-dev": os.path.join(CACHE_PATH, "flux1-dev"),
-            "flux1-schnell": os.path.join(CACHE_PATH, "flux1-schnell"),
-            "flux1-dev2pro": os.path.join(CACHE_PATH, "flux1-dev"),
-        }
+        potential_cache_paths = [
+            os.path.join(CACHE_PATH, "flux1-dev"),
+            os.path.join(CACHE_PATH, "FLUX.1-dev"),
+            os.path.join(CACHE_PATH, "black-forest-labs--FLUX.1-dev"),
+            os.path.join(CACHE_PATH, "models--black-forest-labs--FLUX.1-dev"),
+        ]
         
-        # Use cached version if it exists
-        if base_model in cached_model_paths:
-            cached_path = cached_model_paths[base_model]
+        # Try different cache path patterns
+        for cached_path in potential_cache_paths:
             if os.path.exists(cached_path):
-                logger.info(f"Using cached model from: {cached_path}")
-                return cached_path
+                # Check if it contains model files
+                if any(f.endswith(('.safetensors', '.bin', '.pt')) for f in os.listdir(cached_path) if os.path.isfile(os.path.join(cached_path, f))):
+                    logger.info(f"Using cached model from: {cached_path}")
+                    return cached_path
+                # Check subdirectories
+                for subdir in os.listdir(cached_path):
+                    subpath = os.path.join(cached_path, subdir)
+                    if os.path.isdir(subpath):
+                        if any(f.endswith(('.safetensors', '.bin', '.pt')) for f in os.listdir(subpath) if os.path.isfile(os.path.join(subpath, f))):
+                            logger.info(f"Using cached model from: {subpath}")
+                            return subpath
         
-        # Fallback to HuggingFace Hub paths
+        # Check for HuggingFace cache format
+        hf_cache_path = os.path.expanduser("~/.cache/huggingface/hub/models--black-forest-labs--FLUX.1-dev")
+        if os.path.exists(hf_cache_path):
+            logger.info(f"Using HuggingFace cache: {hf_cache_path}")
+            return hf_cache_path
+        
+        # If base_model looks like a local path, use it directly
+        if os.path.exists(base_model):
+            logger.info(f"Using direct path: {base_model}")
+            return base_model
+        
+        # Fallback to HuggingFace Hub paths (will require authentication)
         model_paths = {
             "flux1-dev": "black-forest-labs/FLUX.1-dev",
             "flux1-schnell": "black-forest-labs/FLUX.1-schnell", 
-            "flux1-dev2pro": "black-forest-labs/FLUX.1-dev",  # Use dev as fallback
+            "flux1-dev2pro": "black-forest-labs/FLUX.1-dev",
         }
         
         hub_path = model_paths.get(base_model, base_model)
-        logger.info(f"Using HuggingFace Hub model: {hub_path}")
+        logger.warning(f"No cached model found, trying HuggingFace Hub: {hub_path}")
+        logger.warning(f"This may fail if model is gated. Check cache paths: {potential_cache_paths}")
         return hub_path
     
     def _generate_sample_prompts(self, params: Dict[str, Any]) -> List[str]:

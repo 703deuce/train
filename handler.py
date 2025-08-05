@@ -23,17 +23,30 @@ import runpod
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Constants
+# Constants - Updated for RunPod network storage support
 WORKSPACE_PATH = "/workspace"
 AI_TOOLKIT_PATH = "/workspace/ai-toolkit"
-DATASETS_PATH = "/workspace/datasets"
-OUTPUT_PATH = "/workspace/outputs"
-CONFIG_PATH = "/workspace/configs"
+
+# Check for network storage (RunPod volume)
+NETWORK_STORAGE_PATH = "/runpod-volume"
+if os.path.exists(NETWORK_STORAGE_PATH):
+    # Use network storage if available
+    DATASETS_PATH = os.path.join(NETWORK_STORAGE_PATH, "datasets")
+    OUTPUT_PATH = os.path.join(NETWORK_STORAGE_PATH, "outputs")
+    CONFIG_PATH = os.path.join(NETWORK_STORAGE_PATH, "configs")
+    CACHE_PATH = os.path.join(NETWORK_STORAGE_PATH, "cache")
+else:
+    # Fallback to workspace
+    DATASETS_PATH = "/workspace/datasets"
+    OUTPUT_PATH = "/workspace/outputs"
+    CONFIG_PATH = "/workspace/configs"
+    CACHE_PATH = "/workspace/cache"
 
 # Ensure directories exist
 os.makedirs(DATASETS_PATH, exist_ok=True)
 os.makedirs(OUTPUT_PATH, exist_ok=True) 
 os.makedirs(CONFIG_PATH, exist_ok=True)
+os.makedirs(CACHE_PATH, exist_ok=True)
 
 class LoRATrainingHandler:
     """Handler for LoRA training using ai-toolkit"""
@@ -50,6 +63,13 @@ class LoRATrainingHandler:
                 logger.info(f"Changed directory to {AI_TOOLKIT_PATH}")
             else:
                 logger.warning(f"AI-Toolkit path {AI_TOOLKIT_PATH} not found")
+            
+            # Log storage paths
+            logger.info(f"Datasets path: {DATASETS_PATH}")
+            logger.info(f"Output path: {OUTPUT_PATH}")
+            logger.info(f"Cache path: {CACHE_PATH}")
+            logger.info(f"Network storage available: {os.path.exists(NETWORK_STORAGE_PATH)}")
+            
         except Exception as e:
             logger.error(f"Failed to setup environment: {e}")
     
@@ -308,13 +328,32 @@ class LoRATrainingHandler:
             return [size, size]
     
     def _get_model_path(self, base_model: str) -> str:
-        """Get the path for the base model"""
+        """Get the path for the base model, checking for cached versions first"""
+        
+        # Check for locally cached models in RunPod network storage
+        cached_model_paths = {
+            "flux1-dev": os.path.join(CACHE_PATH, "flux1-dev"),
+            "flux1-schnell": os.path.join(CACHE_PATH, "flux1-schnell"),
+            "flux1-dev2pro": os.path.join(CACHE_PATH, "flux1-dev"),
+        }
+        
+        # Use cached version if it exists
+        if base_model in cached_model_paths:
+            cached_path = cached_model_paths[base_model]
+            if os.path.exists(cached_path):
+                logger.info(f"Using cached model from: {cached_path}")
+                return cached_path
+        
+        # Fallback to HuggingFace Hub paths
         model_paths = {
             "flux1-dev": "black-forest-labs/FLUX.1-dev",
             "flux1-schnell": "black-forest-labs/FLUX.1-schnell", 
             "flux1-dev2pro": "black-forest-labs/FLUX.1-dev",  # Use dev as fallback
         }
-        return model_paths.get(base_model, base_model)
+        
+        hub_path = model_paths.get(base_model, base_model)
+        logger.info(f"Using HuggingFace Hub model: {hub_path}")
+        return hub_path
     
     def _generate_sample_prompts(self, params: Dict[str, Any]) -> List[str]:
         """Generate sample prompts for training validation"""
@@ -464,6 +503,12 @@ def handler(job):
     try:
         job_input = job["input"]
         logger.info(f"Received job with input keys: {list(job_input.keys())}")
+        
+        # Set up HuggingFace token if provided
+        if "huggingface_token" in job_input:
+            os.environ["HF_TOKEN"] = job_input["huggingface_token"]
+            os.environ["HUGGING_FACE_HUB_TOKEN"] = job_input["huggingface_token"]
+            logger.info("HuggingFace token configured")
         
         # Initialize handler
         trainer = LoRATrainingHandler()

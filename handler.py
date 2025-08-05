@@ -331,7 +331,21 @@ class LoRATrainingHandler:
     def _get_model_path(self, base_model: str) -> str:
         """Get the path for the base model, checking for cached versions first"""
         
-        # Check for locally cached models in RunPod network storage
+        # First check if FLUX weights are directly in the cache directory
+        if base_model in ["flux1-dev", "flux1-schnell"]:
+            # Check if model files are directly in CACHE_PATH
+            if os.path.exists(CACHE_PATH):
+                try:
+                    cache_files = os.listdir(CACHE_PATH)
+                    model_files = [f for f in cache_files if f.endswith(('.safetensors', '.bin', '.pt'))]
+                    if model_files:
+                        logger.info(f"Using cached model files directly from: {CACHE_PATH}")
+                        logger.info(f"Found model files: {model_files[:3]}{'...' if len(model_files) > 3 else ''}")
+                        return CACHE_PATH
+                except Exception as e:
+                    logger.warning(f"Error accessing cache directory: {e}")
+        
+        # Check for subdirectories in cache
         potential_cache_paths = [
             os.path.join(CACHE_PATH, "flux1-dev"),
             os.path.join(CACHE_PATH, "FLUX.1-dev"),
@@ -342,17 +356,28 @@ class LoRATrainingHandler:
         # Try different cache path patterns
         for cached_path in potential_cache_paths:
             if os.path.exists(cached_path):
-                # Check if it contains model files
-                if any(f.endswith(('.safetensors', '.bin', '.pt')) for f in os.listdir(cached_path) if os.path.isfile(os.path.join(cached_path, f))):
-                    logger.info(f"Using cached model from: {cached_path}")
-                    return cached_path
-                # Check subdirectories
-                for subdir in os.listdir(cached_path):
-                    subpath = os.path.join(cached_path, subdir)
-                    if os.path.isdir(subpath):
-                        if any(f.endswith(('.safetensors', '.bin', '.pt')) for f in os.listdir(subpath) if os.path.isfile(os.path.join(subpath, f))):
-                            logger.info(f"Using cached model from: {subpath}")
-                            return subpath
+                try:
+                    # Check if it contains model files
+                    files = os.listdir(cached_path)
+                    model_files = [f for f in files if f.endswith(('.safetensors', '.bin', '.pt'))]
+                    if model_files:
+                        logger.info(f"Using cached model from: {cached_path}")
+                        return cached_path
+                    
+                    # Check subdirectories
+                    for subdir in files:
+                        subpath = os.path.join(cached_path, subdir)
+                        if os.path.isdir(subpath):
+                            try:
+                                subfiles = os.listdir(subpath)
+                                sub_model_files = [f for f in subfiles if f.endswith(('.safetensors', '.bin', '.pt'))]
+                                if sub_model_files:
+                                    logger.info(f"Using cached model from: {subpath}")
+                                    return subpath
+                            except:
+                                continue
+                except Exception as e:
+                    logger.warning(f"Error accessing {cached_path}: {e}")
         
         # Check for HuggingFace cache format
         hf_cache_path = os.path.expanduser("~/.cache/huggingface/hub/models--black-forest-labs--FLUX.1-dev")
@@ -374,7 +399,7 @@ class LoRATrainingHandler:
         
         hub_path = model_paths.get(base_model, base_model)
         logger.warning(f"No cached model found, trying HuggingFace Hub: {hub_path}")
-        logger.warning(f"This may fail if model is gated. Check cache paths: {potential_cache_paths}")
+        logger.warning(f"Cache directory checked: {CACHE_PATH}")
         return hub_path
     
     def _generate_sample_prompts(self, params: Dict[str, Any]) -> List[str]:

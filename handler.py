@@ -136,6 +136,10 @@ class LoRATrainingHandler:
             "max_sequence_length": 512,
             "guidance_scale": 1.0,
             
+            # Model caching and download settings
+            "download_to_network_storage": False,
+            "model_cache_dir": "",
+            
             # LoRA specific layers (optional)
             "only_if_contains": [],
             "ignore_if_contains": [],
@@ -262,10 +266,10 @@ class LoRATrainingHandler:
                             "dtype": params["mixed_precision"],
                         },
                         "model": {
-                            "name_or_path": self._get_model_path(params["base_model"]),
+                            "name_or_path": self._get_model_path(params["base_model"], params),
                             "is_flux": True,
                             "quantize": params.get("fp8_base", False),
-                            "is_local": os.path.exists(self._get_model_path(params["base_model"])),
+                            "is_local": os.path.exists(self._get_model_path(params["base_model"], params)),
                         },
                         "sample": {
                             "enabled": True,
@@ -328,8 +332,21 @@ class LoRATrainingHandler:
             size = int(resolution)
             return [size, size]
     
-    def _get_model_path(self, base_model: str) -> str:
+    def _get_model_path(self, base_model: str, params: Dict[str, Any]) -> str:
         """Get the path for the base model, checking for cached versions first"""
+        
+        # Check if custom model cache directory is specified
+        custom_cache_dir = params.get("model_cache_dir", "")
+        if custom_cache_dir and os.path.exists(custom_cache_dir):
+            logger.info(f"Checking custom model cache directory: {custom_cache_dir}")
+            # Look for FLUX model in custom cache
+            for model_dir in os.listdir(custom_cache_dir):
+                model_path = os.path.join(custom_cache_dir, model_dir)
+                if os.path.isdir(model_path):
+                    # Check if this looks like a HuggingFace model (has model_index.json)
+                    if os.path.exists(os.path.join(model_path, "model_index.json")):
+                        logger.info(f"Using custom cached model from: {model_path}")
+                        return model_path
         
         # First check if FLUX weights are directly in the cache directory
         if base_model in ["flux1-dev", "flux1-schnell"]:
@@ -353,10 +370,28 @@ class LoRATrainingHandler:
             os.path.join(CACHE_PATH, "models--black-forest-labs--FLUX.1-dev"),
         ]
         
+        # Add flux-models directory to potential paths
+        flux_models_dir = os.path.join(NETWORK_STORAGE_PATH, "flux-models")
+        if os.path.exists(flux_models_dir):
+            potential_cache_paths.insert(0, flux_models_dir)
+            # Also check for subdirectories in flux-models
+            try:
+                for subdir in os.listdir(flux_models_dir):
+                    subpath = os.path.join(flux_models_dir, subdir)
+                    if os.path.isdir(subpath):
+                        potential_cache_paths.insert(0, subpath)
+            except:
+                pass
+        
         # Try different cache path patterns
         for cached_path in potential_cache_paths:
             if os.path.exists(cached_path):
                 try:
+                    # Check if this is a proper HuggingFace model directory
+                    if os.path.exists(os.path.join(cached_path, "model_index.json")):
+                        logger.info(f"Using HuggingFace model from: {cached_path}")
+                        return cached_path
+                    
                     # Check if it contains model files
                     files = os.listdir(cached_path)
                     model_files = [f for f in files if f.endswith(('.safetensors', '.bin', '.pt'))]
@@ -369,6 +404,10 @@ class LoRATrainingHandler:
                         subpath = os.path.join(cached_path, subdir)
                         if os.path.isdir(subpath):
                             try:
+                                if os.path.exists(os.path.join(subpath, "model_index.json")):
+                                    logger.info(f"Using HuggingFace model from: {subpath}")
+                                    return subpath
+                                
                                 subfiles = os.listdir(subpath)
                                 sub_model_files = [f for f in subfiles if f.endswith(('.safetensors', '.bin', '.pt'))]
                                 if sub_model_files:
@@ -390,7 +429,15 @@ class LoRATrainingHandler:
             logger.info(f"Using direct path: {base_model}")
             return base_model
         
-        # Fallback to HuggingFace Hub paths (will require authentication)
+        # Setup environment for HuggingFace download to network storage
+        if params.get("download_to_network_storage", False):
+            flux_models_dir = os.path.join(NETWORK_STORAGE_PATH, "flux-models")
+            os.makedirs(flux_models_dir, exist_ok=True)
+            os.environ["HF_HOME"] = flux_models_dir
+            os.environ["TRANSFORMERS_CACHE"] = flux_models_dir
+            logger.info(f"Set HuggingFace cache to network storage: {flux_models_dir}")
+        
+        # Fallback to HuggingFace Hub paths (will download if authenticated)
         model_paths = {
             "flux1-dev": "black-forest-labs/FLUX.1-dev",
             "flux1-schnell": "black-forest-labs/FLUX.1-schnell", 
@@ -398,8 +445,8 @@ class LoRATrainingHandler:
         }
         
         hub_path = model_paths.get(base_model, base_model)
-        logger.warning(f"No cached model found, trying HuggingFace Hub: {hub_path}")
-        logger.warning(f"Cache directory checked: {CACHE_PATH}")
+        logger.info(f"Will download from HuggingFace Hub: {hub_path}")
+        logger.info(f"Cache directories checked: {potential_cache_paths}")
         return hub_path
     
     def _generate_sample_prompts(self, params: Dict[str, Any]) -> List[str]:

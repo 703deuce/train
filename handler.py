@@ -599,6 +599,7 @@ class LoRATrainingHandler:
 
 def handler(job):
     """Main RunPod handler function"""
+    # Updated: 2025-01-08 - Enhanced HuggingFace token handling for FLUX training
     try:
         job_input = job["input"]
         logger.info(f"Received job with input keys: {list(job_input.keys())}")

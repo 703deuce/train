@@ -489,17 +489,46 @@ class LoRATrainingHandler:
             if os.path.exists(AI_TOOLKIT_PATH):
                 os.chdir(AI_TOOLKIT_PATH)
             
+            # Prepare environment with HuggingFace authentication
+            env = os.environ.copy()
+            
+            # Ensure HuggingFace token is available
+            hf_token = os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACE_TOKEN")
+            if hf_token:
+                env["HF_TOKEN"] = hf_token
+                env["HUGGING_FACE_HUB_TOKEN"] = hf_token
+                env["HF_HOME"] = CACHE_PATH
+                logger.info("HuggingFace token configured for subprocess")
+            else:
+                logger.warning("No HuggingFace token found in environment")
+            
+            # Run HuggingFace login first to ensure authentication
+            if hf_token:
+                login_cmd = [sys.executable, "-c", f"from huggingface_hub import login; login(token='{hf_token}')"]
+                logger.info("Running HuggingFace login...")
+                login_process = subprocess.run(
+                    login_cmd,
+                    capture_output=True,
+                    text=True,
+                    env=env
+                )
+                if login_process.returncode == 0:
+                    logger.info("HuggingFace login successful")
+                else:
+                    logger.warning(f"HuggingFace login failed: {login_process.stderr}")
+            
             # Run training command
             cmd = [sys.executable, "run.py", config_path]
             logger.info(f"Running training command: {' '.join(cmd)}")
             
-            # Execute training
+            # Execute training with environment
             process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 universal_newlines=True,
-                bufsize=1
+                bufsize=1,
+                env=env
             )
             
             # Stream output
@@ -600,6 +629,7 @@ class LoRATrainingHandler:
 def handler(job):
     """Main RunPod handler function"""
     # Updated: 2025-01-08 - Enhanced HuggingFace token handling for FLUX training
+    # Updated: 2025-01-08 - Fixed subprocess environment and added HF login
     try:
         job_input = job["input"]
         logger.info(f"Received job with input keys: {list(job_input.keys())}")

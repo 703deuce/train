@@ -278,7 +278,7 @@ class LoRATrainingHandler:
                             "walk_seed": True,
                             "guidance_scale": params["guidance_scale"],
                             "sample_steps": params["sample_steps"],
-                            "sampler": "euler",
+                            "sampler": "dpmpp_2m",  # Use DPM++ 2M instead of euler for FLUX compatibility
                             "prompts": self._generate_sample_prompts(params),
                             "neg": "",
                             "width": self._parse_resolution(params["resolution"])[0],
@@ -630,6 +630,7 @@ def handler(job):
     """Main RunPod handler function"""
     # Updated: 2025-01-08 - Enhanced HuggingFace token handling for FLUX training
     # Updated: 2025-01-08 - Fixed subprocess environment and added HF login
+    # Updated: 2025-01-08 - Fixed FLUX sampler compatibility (euler -> dpmpp_2m)
     try:
         job_input = job["input"]
         logger.info(f"Received job with input keys: {list(job_input.keys())}")

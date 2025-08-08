@@ -687,6 +687,33 @@ def handler(job):
         try:
             items = os.listdir(dataset_path)
             logger.info(f"Found {len(items)} items in dataset folder: {items}")
+            
+            # Check for any directories
+            directories = []
+            files = []
+            for item in items:
+                item_path = os.path.join(dataset_path, item)
+                if os.path.isdir(item_path):
+                    directories.append(item)
+                    # List contents of subdirectory
+                    try:
+                        sub_items = os.listdir(item_path)
+                        logger.info(f"Subdirectory '{item}' contains: {sub_items}")
+                    except Exception as e:
+                        logger.error(f"Error listing subdirectory '{item}': {e}")
+                else:
+                    files.append(item)
+            
+            logger.info(f"Directories found: {directories}")
+            logger.info(f"Files found: {files}")
+            
+            if directories:
+                logger.error(f"Found directories in dataset folder: {directories}")
+                return {
+                    "error": f"Dataset folder contains directories: {directories}. Please ensure only image files are present.",
+                    "status": "failed"
+                }
+                
         except Exception as e:
             logger.error(f"Error listing dataset folder: {e}")
             return {

@@ -50,7 +50,7 @@ RUN pip install -r requirements.txt
 RUN pip install --upgrade accelerate transformers diffusers huggingface_hub
 
 # Download FLUX DreamBooth training script
-RUN wget https://github.com/black-forest-labs/FLUX/raw/main/train_dreambooth_flux.py -O /workspace/train_dreambooth_flux.py
+RUN wget https://github.com/huggingface/diffusers/raw/main/examples/dreambooth/train_dreambooth_flux.py -O /workspace/train_dreambooth_flux.py
 
 # Copy our handler and requirements
 COPY requirements.txt /workspace/

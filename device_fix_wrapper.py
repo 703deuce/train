@@ -10,6 +10,7 @@ import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 import logging
+import subprocess
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -122,27 +123,40 @@ def run_training_with_device_fix(training_script_path, *args):
     # Setup device environment
     device = setup_device_environment()
     
-    # Import and run the training script
+    # Build the command to run the training script
+    cmd = [sys.executable, training_script_path] + list(args)
     logger.info(f"Running training script: {training_script_path}")
-    logger.info(f"Arguments: {args}")
-    
-    # Add the script directory to Python path
-    script_dir = os.path.dirname(training_script_path)
-    if script_dir not in sys.path:
-        sys.path.insert(0, script_dir)
-    
-    # Import the training script as a module
-    script_name = os.path.basename(training_script_path).replace('.py', '')
+    logger.info(f"Command: {' '.join(cmd)}")
     
     try:
-        # Import the training module
-        training_module = __import__(script_name)
+        # Run the training script as a subprocess
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            universal_newlines=True,
+            bufsize=1
+        )
         
-        # Run the main function if it exists
-        if hasattr(training_module, 'main'):
-            training_module.main()
-        else:
-            logger.warning("No main function found in training script")
+        # Stream output
+        output_lines = []
+        for line in process.stdout:
+            line = line.strip()
+            if line:
+                logger.info(f"Training: {line}")
+                output_lines.append(line)
+        
+        # Wait for completion
+        return_code = process.wait()
+        
+        if return_code != 0:
+            raise subprocess.CalledProcessError(return_code, cmd)
+        
+        logger.info("Training completed successfully")
+        return {
+            "status": "success",
+            "output": output_lines[-50:] if len(output_lines) > 50 else output_lines
+        }
             
     except Exception as e:
         logger.error(f"Error running training script: {e}")
@@ -157,4 +171,12 @@ if __name__ == "__main__":
     training_script = sys.argv[1]
     training_args = sys.argv[2:]
     
-    run_training_with_device_fix(training_script, *training_args) 
+    try:
+        result = run_training_with_device_fix(training_script, *training_args)
+        if result["status"] == "success":
+            sys.exit(0)
+        else:
+            sys.exit(1)
+    except Exception as e:
+        print(f"Error: {e}")
+        sys.exit(1) 

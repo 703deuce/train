@@ -195,9 +195,6 @@ class DreamBoothTrainingHandler:
             "--instance_prompt", params.get("instance_prompt", ""),
             "--class_prompt", params.get("class_prompt", ""),
             "--train_text_encoder",
-            "--with_prior_preservation",
-            "--prior_loss_weight", str(params.get("prior_loss_weight", 1.0)),
-            "--num_class_images", str(params.get("num_class_images", 50)),
             "--resolution", str(self._parse_resolution(params["resolution"])[0]),
             "--train_batch_size", str(params["batch_size"]),
             "--gradient_accumulation_steps", str(params["gradient_accumulation_steps"]),
@@ -207,13 +204,27 @@ class DreamBoothTrainingHandler:
             "--mixed_precision", params["mixed_precision"],
         ]
         
+        # Add prior preservation if enabled
+        if params.get("with_prior_preservation", True):
+            cmd_args.extend([
+                "--with_prior_preservation",
+                "--prior_loss_weight", str(params.get("prior_loss_weight", 1.0)),
+                "--num_class_images", str(params.get("num_class_images", 50)),
+            ])
+            
+            # Add class data directory (required for prior preservation)
+            class_data_dir = params.get("class_data_dir")
+            if not class_data_dir:
+                # Create a default class data directory
+                class_data_dir = os.path.join(DATASETS_PATH, f"{model_name}_class_images")
+                os.makedirs(class_data_dir, exist_ok=True)
+                logger.info(f"Created default class data directory: {class_data_dir}")
+            
+            cmd_args.extend(["--class_data_dir", class_data_dir])
+        
         # Add optional parameters (only those supported by FLUX DreamBooth)
         if params.get("gradient_checkpointing"):
             cmd_args.append("--gradient_checkpointing")
-        
-        # Add class data directory if specified
-        if params.get("class_data_dir"):
-            cmd_args.extend(["--class_data_dir", params["class_data_dir"]])
         
         # Save command to file for execution
         config_filename = f"{model_name}_cmd.json"

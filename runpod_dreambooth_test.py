@@ -63,7 +63,7 @@ def create_dreambooth_payload(hf_token: str):
             
             # FLUX DreamBooth specific settings
             "train_text_encoder": True,
-            "with_prior_preservation": True,
+            "with_prior_preservation": False,  # Disable prior preservation for now to avoid class data requirement
             "prior_loss_weight": 1.0,
             "num_class_images": 50,
             

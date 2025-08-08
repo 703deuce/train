@@ -267,9 +267,9 @@ class DreamBoothTrainingHandler:
         output_dir = os.path.join(OUTPUT_PATH, model_name)
         os.makedirs(output_dir, exist_ok=True)
         
-        # Build command-line arguments for FLUX DreamBooth
+        # Build command-line arguments for FLUX DreamBooth training
         cmd_args = [
-            "python", "/workspace/train_dreambooth_flux.py",
+            "python", "/workspace/device_fix_wrapper.py", "/workspace/train_dreambooth_flux.py",
             "--pretrained_model_name_or_path", self._get_model_path(params["base_model"], params),
             "--instance_data_dir", dataset_path,
             "--output_dir", output_dir,

@@ -39,13 +39,16 @@ def encode_file(file_path):
 # Example API call
 payload = {
     "input": {
-        "model_name": "my_character_lora",
-        "trigger_word": "mychar",
+        "model_name": "my_character_dreambooth",
+        "instance_prompt": "a photo of mychar",
+        "class_prompt": "a photo of a person",
         "base_model": "flux1-dev",
         "steps": 2000,
-        "learning_rate": 0.0003,
-        "network_dim": 16,
-        "network_alpha": 16,
+        "learning_rate": 2e-6,
+        "train_text_encoder": True,
+        "with_prior_preservation": True,
+        "prior_loss_weight": 1.0,
+        "num_class_images": 50,
         "resolution": "1024x1024",
         "batch_size": 1,
         "dataset": [
@@ -72,7 +75,7 @@ result = response.json()
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `model_name` | string | Unique name for your LoRA model |
+| `model_name` | string | Unique name for your DreamBooth model |
 | `dataset` | array/string | Training dataset (files or base64 zip) |
 
 ### Model Configuration
@@ -80,7 +83,8 @@ result = response.json()
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `base_model` | string | `"flux1-dev"` | Base model (`flux1-dev`, `flux1-schnell`) |
-| `trigger_word` | string | `""` | Trigger word for your LoRA |
+| `instance_prompt` | string | `""` | Instance prompt for your subject |
+| `class_prompt` | string | `""` | Class prompt for prior preservation |
 | `model_type` | string | `"flux"` | Model type (currently supports `flux`) |
 
 ### Training Parameters
@@ -88,21 +92,21 @@ result = response.json()
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `steps` | integer | `2000` | Number of training steps |
-| `learning_rate` | float | `0.0003` | Learning rate for optimizer |
+| `learning_rate` | float | `2e-6` | Learning rate for optimizer (DreamBooth uses lower rates) |
 | `batch_size` | integer | `1` | Training batch size |
 | `gradient_accumulation_steps` | integer | `1` | Steps to accumulate gradients |
 | `resolution` | string | `"1024x1024"` | Training resolution (`"1024x1024"`, `"512x512"`) |
 | `max_bucket_resolution` | integer | `2048` | Maximum bucket resolution |
 | `min_bucket_resolution` | integer | `256` | Minimum bucket resolution |
 
-### LoRA Network Settings
+### DreamBooth Settings
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `network_type` | string | `"lora"` | Network type (`lora`, `lokr`) |
-| `network_dim` | integer | `16` | LoRA rank/dimension |
-| `network_alpha` | integer | `16` | LoRA alpha parameter |
-| `network_dropout` | float | `0.0` | Network dropout rate |
+| `train_text_encoder` | boolean | `true` | Train text encoder (required for DreamBooth) |
+| `with_prior_preservation` | boolean | `true` | Use prior preservation to maintain general knowledge |
+| `prior_loss_weight` | float | `1.0` | Weight for prior preservation loss |
+| `num_class_images` | integer | `50` | Number of class images for prior preservation |
 
 ### Optimizer Settings
 
@@ -138,8 +142,6 @@ result = response.json()
 | `noise_offset` | float | `0.05` | Noise offset for training |
 | `min_snr_gamma` | float | `7` | Minimum SNR gamma |
 | `seed` | integer | `42` | Random seed |
-| `only_if_contains` | array | `[]` | Train only layers containing these strings |
-| `ignore_if_contains` | array | `[]` | Ignore layers containing these strings |
 
 ## Dataset Format
 
@@ -172,12 +174,12 @@ result = response.json()
 ```json
 {
   "status": "completed",
-  "model_name": "my_character_lora",
+  "model_name": "my_character_dreambooth",
   "training_steps": 2000,
   "outputs": {
     "models": [
       {
-        "filename": "my_character_lora.safetensors",
+        "filename": "my_character_dreambooth.safetensors",
         "data": "base64_encoded_model_data",
         "size": 67108864
       }
@@ -206,15 +208,16 @@ result = response.json()
 
 ### Dataset Preparation
 - Use high-quality images (minimum 512x512)
-- Include 10-50 training images for character LoRAs
-- Write descriptive captions including your trigger word
+- Include 10-50 training images for character DreamBooth
+- Write descriptive captions including your instance prompt
 - Use consistent naming: `image1.jpg` + `image1.txt`
 
 ### Training Parameters
-- Start with `steps: 1000-2000` for most LoRAs
-- Use `network_dim: 16-64` (higher for complex subjects)
+- Start with `steps: 1000-2000` for most DreamBooth training
+- Use `learning_rate: 2e-6` (lower than LoRA for stability)
 - Keep `batch_size: 1` on 24GB VRAM
 - Use `resolution: "1024x1024"` for FLUX training
+- Enable `train_text_encoder: true` for full fine-tuning
 
 ### Memory Management
 - Enable `fp8_base: true` for VRAM savings
@@ -226,7 +229,7 @@ result = response.json()
 
 | Model | Minimum VRAM | Recommended VRAM | Notes |
 |-------|--------------|------------------|-------|
-| FLUX.1-dev | 24GB | 40GB+ | With memory optimizations |
+| FLUX.1-dev | 24GB | 40GB+ | DreamBooth requires more VRAM than LoRA |
 | FLUX.1-schnell | 20GB | 24GB+ | Faster training variant |
 
 ## Troubleshooting
@@ -247,21 +250,14 @@ The API provides real-time training logs and generates sample images every N ste
 
 ## Advanced Usage
 
-### Custom Layer Training
-```json
-{
-  "only_if_contains": [
-    "transformer.single_transformer_blocks.7.proj_out",
-    "transformer.single_transformer_blocks.20.proj_out"
-  ]
-}
-```
+### Prior Preservation
+DreamBooth uses prior preservation to maintain general knowledge while learning your specific subject. The `class_prompt` should describe the general category of your subject.
 
 ### Multi-Concept Training
-Use different trigger words in your captions and adjust the network dimension accordingly.
+Use different instance prompts for different subjects. DreamBooth can learn multiple concepts in a single training run.
 
-### Style Transfer LoRAs
-Use artistic images without trigger words and focus on style consistency.
+### Style Transfer
+DreamBooth can learn artistic styles by using style images with appropriate instance prompts.
 
 ## Support
 

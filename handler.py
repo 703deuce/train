@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-AI-Toolkit LoRA Training API Handler for RunPod Serverless
-Supports FLUX LoRA training with comprehensive parameter configuration
+AI-Toolkit DreamBooth Training API Handler for RunPod Serverless
+Supports FLUX DreamBooth fine-tuning with comprehensive parameter configuration
 """
 
 import os
@@ -48,8 +48,8 @@ os.makedirs(OUTPUT_PATH, exist_ok=True)
 os.makedirs(CONFIG_PATH, exist_ok=True)
 os.makedirs(CACHE_PATH, exist_ok=True)
 
-class LoRATrainingHandler:
-    """Handler for LoRA training using ai-toolkit"""
+class DreamBoothTrainingHandler:
+    """Handler for DreamBooth fine-tuning using ai-toolkit"""
     
     def __init__(self):
         self.setup_environment()
@@ -86,22 +86,23 @@ class LoRATrainingHandler:
             # Basic settings
             "model_type": "flux",
             "base_model": "flux1-dev",
-            "trigger_word": "",
+            "instance_prompt": "",
+            "class_prompt": "",
             
             # Training parameters
             "steps": 2000,
-            "learning_rate": 0.0003,
+            "learning_rate": 2e-6,  # DreamBooth typically uses lower learning rate
             "batch_size": 1,
             "gradient_accumulation_steps": 1,
             "resolution": "1024x1024",
             "max_bucket_resolution": 2048,
             "min_bucket_resolution": 256,
             
-            # LoRA network settings
-            "network_type": "lora",
-            "network_dim": 16,
-            "network_alpha": 16,
-            "network_dropout": 0.0,
+            # DreamBooth settings
+            "train_text_encoder": True,
+            "with_prior_preservation": True,
+            "prior_loss_weight": 1.0,
+            "num_class_images": 50,
             
             # Optimizer settings
             "optimizer": "AdamW8bit",
@@ -134,15 +135,10 @@ class LoRATrainingHandler:
             "blocks_to_swap": None,
             "apply_t5_attention_mask": True,
             "max_sequence_length": 512,
-            "guidance_scale": 1.0,
             
             # Model caching and download settings
             "download_to_network_storage": False,
             "model_cache_dir": "",
-            
-            # LoRA specific layers (optional)
-            "only_if_contains": [],
-            "ignore_if_contains": [],
         }
         
         # Merge defaults with input
@@ -211,15 +207,15 @@ class LoRATrainingHandler:
             raise ValueError(f"Invalid dataset format: {e}")
     
     def generate_config(self, params: Dict[str, Any], dataset_path: str) -> str:
-        """Generate YAML configuration file for training"""
+        """Generate YAML configuration file for DreamBooth training"""
         
         model_name = params["model_name"]
         output_dir = os.path.join(OUTPUT_PATH, model_name)
         os.makedirs(output_dir, exist_ok=True)
         
-        # Build configuration dictionary
+        # Build configuration dictionary for DreamBooth
         config = {
-            "job": "extension",
+            "job": "dreambooth",  # Changed from extension to dreambooth
             "config": {
                 # Model settings
                 "name": model_name,
@@ -228,12 +224,17 @@ class LoRATrainingHandler:
                         "type": "sd_trainer",
                         "training_folder": output_dir,
                         "device": "cuda:0",
-                        "trigger_word": params.get("trigger_word", ""),
-                        "network": {
-                            "type": params["network_type"],
-                            "linear": params["network_dim"],
-                            "linear_alpha": params["network_alpha"],
+                        "instance_prompt": params.get("instance_prompt", ""),
+                        "class_prompt": params.get("class_prompt", ""),
+                        
+                        # DreamBooth specific settings
+                        "dreambooth": {
+                            "train_text_encoder": params.get("train_text_encoder", True),
+                            "with_prior_preservation": params.get("with_prior_preservation", True),
+                            "prior_loss_weight": params.get("prior_loss_weight", 1.0),
+                            "num_class_images": params.get("num_class_images", 50),
                         },
+                        
                         "save": {
                             "dtype": params["mixed_precision"],
                             "save_every": params["save_every_n_steps"],
@@ -254,7 +255,7 @@ class LoRATrainingHandler:
                             "steps": params["steps"],
                             "gradient_accumulation_steps": params["gradient_accumulation_steps"],
                             "train_unet": True,
-                            "train_text_encoder": False,
+                            "train_text_encoder": params.get("train_text_encoder", True),  # Enable text encoder training for DreamBooth
                             "gradient_checkpointing": params["gradient_checkpointing"],
                             # Removed noise_scheduler - let FLUX use its internal scheduler
                             "optimizer": params["optimizer"],
@@ -288,15 +289,6 @@ class LoRATrainingHandler:
                 ]
             }
         }
-        
-        # Add network kwargs if specified
-        if params.get("only_if_contains") or params.get("ignore_if_contains"):
-            network_kwargs = {}
-            if params.get("only_if_contains"):
-                network_kwargs["only_if_contains"] = params["only_if_contains"]
-            if params.get("ignore_if_contains"):
-                network_kwargs["ignore_if_contains"] = params["ignore_if_contains"]
-            config["config"]["process"][0]["network"]["network_kwargs"] = network_kwargs
         
         # Add advanced training parameters
         if params.get("noise_offset", 0) > 0:
@@ -455,29 +447,40 @@ class LoRATrainingHandler:
         return hub_path
     
     def _generate_sample_prompts(self, params: Dict[str, Any]) -> List[str]:
-        """Generate sample prompts for training validation"""
-        trigger = params.get("trigger_word", "")
+        """Generate sample prompts for DreamBooth training validation"""
+        instance_prompt = params.get("instance_prompt", "")
+        class_prompt = params.get("class_prompt", "")
         
         if params.get("sample_prompts"):
             # Use custom prompts if provided
             prompts = params["sample_prompts"]
-            if trigger:
-                # Add trigger word to prompts that don't have it
-                prompts = [p if trigger in p else f"{p}, {trigger}" for p in prompts]
+            if instance_prompt:
+                # Add instance prompt to prompts that don't have it
+                prompts = [p if instance_prompt in p else f"{p}, {instance_prompt}" for p in prompts]
             return prompts
         
-        # Default prompts
-        base_prompts = [
-            "a portrait photo",
-            "a professional headshot",
-            "a close-up photo",
-            "a full body photo",
-        ]
-        
-        if trigger:
-            prompts = [f"{prompt} of {trigger}" for prompt in base_prompts]
+        # Default prompts for DreamBooth
+        if instance_prompt:
+            prompts = [
+                instance_prompt,
+                f"{instance_prompt}, high quality, detailed",
+                f"{instance_prompt}, professional photography",
+                f"{instance_prompt}, close-up portrait",
+            ]
+        elif class_prompt:
+            prompts = [
+                class_prompt,
+                f"{class_prompt}, high quality",
+                f"{class_prompt}, detailed",
+            ]
         else:
-            prompts = base_prompts
+            # Fallback prompts
+            prompts = [
+                "a portrait photo",
+                "a professional headshot",
+                "a close-up photo",
+                "a full body photo",
+            ]
         
         return prompts
     
@@ -631,6 +634,7 @@ def handler(job):
     # Updated: 2025-01-08 - Enhanced HuggingFace token handling for FLUX training
     # Updated: 2025-01-08 - Fixed subprocess environment and added HF login
     # Updated: 2025-01-08 - Removed all scheduler configurations to let FLUX use internal scheduler
+    # Updated: 2025-01-08 - Converted from LoRA to DreamBooth training
     try:
         job_input = job["input"]
         logger.info(f"Received job with input keys: {list(job_input.keys())}")
@@ -651,7 +655,7 @@ def handler(job):
             logger.info("Using HuggingFace token from container environment")
         
         # Initialize handler
-        trainer = LoRATrainingHandler()
+        trainer = DreamBoothTrainingHandler()
         
         # Validate input
         params = trainer.validate_input(job_input)

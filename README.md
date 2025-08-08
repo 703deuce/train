@@ -1,12 +1,12 @@
-# AI-Toolkit LoRA Training API for RunPod Serverless
+# AI-Toolkit DreamBooth Training API for RunPod Serverless
 
-This project provides a comprehensive API for training LoRA (Low-Rank Adaptation) models using the [ai-toolkit](https://github.com/ostris/ai-toolkit) on RunPod Serverless infrastructure. It supports FLUX model training with extensive parameter customization.
+This project provides a comprehensive API for DreamBooth fine-tuning using the [ai-toolkit](https://github.com/ostris/ai-toolkit) on RunPod Serverless infrastructure. It supports FLUX model training with extensive parameter customization.
 
 ## Features
 
-- **FLUX LoRA Training**: Full support for FLUX.1-dev and FLUX.1-schnell models
+- **FLUX DreamBooth Training**: Full support for FLUX.1-dev and FLUX.1-schnell models
 - **Flexible Dataset Handling**: Support for various dataset formats (zip files, individual files)
-- **Comprehensive Parameters**: All major training parameters exposed via API
+- **Comprehensive Parameters**: All major DreamBooth training parameters exposed via API
 - **Memory Optimization**: Built-in support for fp8, gradient checkpointing, and memory-efficient training
 - **Real-time Monitoring**: Training progress logging and sample generation
 - **Output Management**: Automatic collection and encoding of trained models and samples

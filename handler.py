@@ -219,8 +219,8 @@ class DreamBoothTrainingHandler:
             "--pretrained_model_name_or_path", self._get_model_path(params["base_model"], params),
             "--instance_data_dir", dataset_path,
             "--output_dir", output_dir,
-            "--instance_prompt", params.get("instance_prompt", ""),
-            "--class_prompt", params.get("class_prompt", ""),
+            "--instance_prompt", f'"{params.get("instance_prompt", "")}"',
+            "--class_prompt", f'"{params.get("class_prompt", "")}"',
             "--train_text_encoder",
             "--with_prior_preservation",
             "--prior_loss_weight", str(params.get("prior_loss_weight", 1.0)),
@@ -235,18 +235,9 @@ class DreamBoothTrainingHandler:
             "--save_model_every_n_steps", str(params["save_every_n_steps"]),
         ]
         
-        # Add optional parameters
-        if params.get("noise_offset", 0) > 0:
-            cmd_args.extend(["--noise_offset", str(params["noise_offset"])])
-        
-        if params.get("min_snr_gamma"):
-            cmd_args.extend(["--min_snr_gamma", str(params["min_snr_gamma"])])
-        
+        # Add optional parameters (only those supported by FLUX DreamBooth)
         if params.get("gradient_checkpointing"):
             cmd_args.append("--gradient_checkpointing")
-        
-        if params.get("fp8_base"):
-            cmd_args.append("--fp8")
         
         # Save command to file for execution
         config_filename = f"{model_name}_cmd.txt"
@@ -577,6 +568,7 @@ def handler(job):
     # Updated: 2025-01-08 - Converted from LoRA to DreamBooth training
     # Updated: 2025-01-08 - Fixed to use official FLUX DreamBooth train_dreambooth_flux.py script
     # Updated: 2025-01-08 - Added FLUX DreamBooth script download and fixed script path
+    # Updated: 2025-01-08 - Fixed prompt quoting and removed unsupported arguments
     try:
         job_input = job["input"]
         logger.info(f"Received job with input keys: {list(job_input.keys())}")

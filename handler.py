@@ -185,13 +185,34 @@ class DreamBoothTrainingHandler:
     def _flatten_dataset_directory(self, dataset_path: str):
         """Flatten dataset directory structure to ensure images are directly accessible"""
         try:
-            # Check if there's only one subdirectory
+            logger.info(f"Checking dataset structure at: {dataset_path}")
+            
+            # Get all items in the dataset directory
             items = os.listdir(dataset_path)
-            if len(items) == 1 and os.path.isdir(os.path.join(dataset_path, items[0])):
-                subdir_path = os.path.join(dataset_path, items[0])
-                subdir_name = items[0]
-                
-                logger.info(f"Found subdirectory '{subdir_name}', flattening structure...")
+            logger.info(f"Found items in dataset: {items}")
+            
+            # Check if we have image files directly in the dataset directory
+            image_extensions = {'.jpg', '.jpeg', '.png', '.webp', '.bmp', '.tiff'}
+            direct_images = [item for item in items if os.path.isfile(os.path.join(dataset_path, item)) 
+                           and any(item.lower().endswith(ext) for ext in image_extensions)]
+            
+            if direct_images:
+                logger.info(f"Found {len(direct_images)} images directly in dataset directory")
+                return  # Images are already at the root level
+            
+            # Look for subdirectories that might contain images
+            subdirs = [item for item in items if os.path.isdir(os.path.join(dataset_path, item))]
+            logger.info(f"Found subdirectories: {subdirs}")
+            
+            if not subdirs:
+                logger.warning("No subdirectories found and no images at root level")
+                return
+            
+            # If there's only one subdirectory, flatten it
+            if len(subdirs) == 1:
+                subdir_name = subdirs[0]
+                subdir_path = os.path.join(dataset_path, subdir_name)
+                logger.info(f"Flattening single subdirectory: {subdir_name}")
                 
                 # Move all files from subdirectory to main directory
                 for item in os.listdir(subdir_path):
@@ -209,10 +230,36 @@ class DreamBoothTrainingHandler:
                 os.rmdir(subdir_path)
                 logger.info(f"Successfully flattened dataset structure")
                 
+            else:
+                # Multiple subdirectories - check each one for images
+                logger.info(f"Multiple subdirectories found, checking each for images")
+                for subdir_name in subdirs:
+                    subdir_path = os.path.join(dataset_path, subdir_name)
+                    subdir_images = [item for item in os.listdir(subdir_path) 
+                                   if os.path.isfile(os.path.join(subdir_path, item)) 
+                                   and any(item.lower().endswith(ext) for ext in image_extensions)]
+                    
+                    if subdir_images:
+                        logger.info(f"Found {len(subdir_images)} images in subdirectory: {subdir_name}")
+                        # Move images from this subdirectory to root
+                        for item in subdir_images:
+                            src = os.path.join(subdir_path, item)
+                            dst = os.path.join(dataset_path, item)
+                            
+                            if os.path.exists(dst):
+                                os.remove(dst)
+                            
+                            shutil.move(src, dst)
+                        
+                        # Remove the subdirectory if it's now empty
+                        if not os.listdir(subdir_path):
+                            os.rmdir(subdir_path)
+                            logger.info(f"Removed empty subdirectory: {subdir_name}")
+                
         except Exception as e:
             logger.warning(f"Failed to flatten dataset directory: {e}")
             # Don't raise error, continue with original structure
-    
+
     def generate_config(self, params: Dict[str, Any], dataset_path: str) -> str:
         """Generate command-line arguments for FLUX DreamBooth training"""
         

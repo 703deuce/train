@@ -213,27 +213,24 @@ class DreamBoothTrainingHandler:
         output_dir = os.path.join(OUTPUT_PATH, model_name)
         os.makedirs(output_dir, exist_ok=True)
         
-        # Build configuration dictionary for DreamBooth
+        # Build configuration dictionary for FLUX DreamBooth
         config = {
-            "job": "dreambooth",  # Changed from extension to dreambooth
+            "job": "dreambooth",
             "config": {
-                # Model settings
                 "name": model_name,
                 "process": [
                     {
-                        "type": "sd_trainer",
+                        "type": "dreambooth_trainer",  # Use dreambooth_trainer instead of sd_trainer
                         "training_folder": output_dir,
                         "device": "cuda:0",
+                        
+                        # FLUX DreamBooth specific settings
                         "instance_prompt": params.get("instance_prompt", ""),
                         "class_prompt": params.get("class_prompt", ""),
-                        
-                        # DreamBooth specific settings
-                        "dreambooth": {
-                            "train_text_encoder": params.get("train_text_encoder", True),
-                            "with_prior_preservation": params.get("with_prior_preservation", True),
-                            "prior_loss_weight": params.get("prior_loss_weight", 1.0),
-                            "num_class_images": params.get("num_class_images", 50),
-                        },
+                        "train_text_encoder": params.get("train_text_encoder", True),
+                        "with_prior_preservation": params.get("with_prior_preservation", True),
+                        "prior_loss_weight": params.get("prior_loss_weight", 1.0),
+                        "num_class_images": params.get("num_class_images", 50),
                         
                         "save": {
                             "dtype": params["mixed_precision"],
@@ -255,9 +252,8 @@ class DreamBoothTrainingHandler:
                             "steps": params["steps"],
                             "gradient_accumulation_steps": params["gradient_accumulation_steps"],
                             "train_unet": True,
-                            "train_text_encoder": params.get("train_text_encoder", True),  # Enable text encoder training for DreamBooth
+                            "train_text_encoder": params.get("train_text_encoder", True),
                             "gradient_checkpointing": params["gradient_checkpointing"],
-                            # Removed noise_scheduler - let FLUX use its internal scheduler
                             "optimizer": params["optimizer"],
                             "lr": params["learning_rate"],
                             "ema_config": {
@@ -279,7 +275,6 @@ class DreamBoothTrainingHandler:
                             "walk_seed": True,
                             "guidance_scale": params["guidance_scale"],
                             "sample_steps": params["sample_steps"],
-                            # Removed sampler configuration - let FLUX use its internal scheduler
                             "prompts": self._generate_sample_prompts(params),
                             "neg": "",
                             "width": self._parse_resolution(params["resolution"])[0],

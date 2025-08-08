@@ -61,7 +61,7 @@ def create_dreambooth_payload():
             "gradient_accumulation_steps": 1,
             "resolution": "1024x1024",
             
-            # DreamBooth specific settings
+            # FLUX DreamBooth specific settings
             "train_text_encoder": True,
             "with_prior_preservation": True,
             "prior_loss_weight": 1.0,

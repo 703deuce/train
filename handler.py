@@ -310,6 +310,9 @@ class DreamBoothTrainingHandler:
         # Add device management for FLUX to avoid device mismatch errors
         cmd_args.extend([
             "--dataloader_num_workers", "0",  # Reduce worker processes to avoid device issues
+            "--dataloader_pin_memory", "false",  # Disable pin memory to avoid device issues
+            "--max_grad_norm", "1.0",  # Limit gradient norm
+            "--seed", "42",  # Set fixed seed for reproducibility
         ])
         
         # Save command to file for execution
@@ -516,7 +519,13 @@ class DreamBoothTrainingHandler:
             # Add device management environment variables
             env["CUDA_VISIBLE_DEVICES"] = "0"
             env["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:512"
-            logger.info("Device management environment variables configured")
+            env["CUDA_LAUNCH_BLOCKING"] = "1"  # Force synchronous CUDA operations
+            env["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:512,expandable_segments:True"
+            env["OMP_NUM_THREADS"] = "1"  # Limit OpenMP threads
+            env["MKL_NUM_THREADS"] = "1"  # Limit MKL threads
+            env["NUMEXPR_NUM_THREADS"] = "1"  # Limit NumExpr threads
+            env["TOKENIZERS_PARALLELISM"] = "false"  # Disable tokenizer parallelism
+            logger.info("Enhanced device management environment variables configured")
             
             # Run HuggingFace login first to ensure authentication
             if hf_token:
@@ -532,6 +541,28 @@ class DreamBoothTrainingHandler:
                     logger.info("HuggingFace login successful")
                 else:
                     logger.warning(f"HuggingFace login failed: {login_process.stderr}")
+            
+            # Run device check to ensure CUDA is properly initialized
+            device_check_cmd = [
+                sys.executable, "-c", 
+                "import torch; print(f'CUDA available: {torch.cuda.is_available()}'); "
+                "print(f'CUDA device count: {torch.cuda.device_count()}'); "
+                "if torch.cuda.is_available(): "
+                "print(f'Current device: {torch.cuda.current_device()}'); "
+                "print(f'Device name: {torch.cuda.get_device_name()}'); "
+                "torch.cuda.empty_cache(); print('CUDA cache cleared')"
+            ]
+            logger.info("Running device check...")
+            device_process = subprocess.run(
+                device_check_cmd,
+                capture_output=True,
+                text=True,
+                env=env
+            )
+            if device_process.returncode == 0:
+                logger.info(f"Device check successful: {device_process.stdout.strip()}")
+            else:
+                logger.warning(f"Device check failed: {device_process.stderr}")
             
             # Execute training with environment
             process = subprocess.Popen(

@@ -148,6 +148,9 @@ class DreamBoothTrainingHandler:
                 # Remove zip file
                 os.remove(zip_path)
                 
+                # Flatten directory structure if needed
+                self._flatten_dataset_directory(dataset_path)
+                
             elif isinstance(dataset_data, list):
                 # Handle list of files
                 for i, file_data in enumerate(dataset_data):
@@ -178,6 +181,37 @@ class DreamBoothTrainingHandler:
         except Exception as e:
             logger.error(f"Failed to process dataset: {e}")
             raise ValueError(f"Invalid dataset format: {e}")
+    
+    def _flatten_dataset_directory(self, dataset_path: str):
+        """Flatten dataset directory structure to ensure images are directly accessible"""
+        try:
+            # Check if there's only one subdirectory
+            items = os.listdir(dataset_path)
+            if len(items) == 1 and os.path.isdir(os.path.join(dataset_path, items[0])):
+                subdir_path = os.path.join(dataset_path, items[0])
+                subdir_name = items[0]
+                
+                logger.info(f"Found subdirectory '{subdir_name}', flattening structure...")
+                
+                # Move all files from subdirectory to main directory
+                for item in os.listdir(subdir_path):
+                    src = os.path.join(subdir_path, item)
+                    dst = os.path.join(dataset_path, item)
+                    
+                    if os.path.exists(dst):
+                        # If file already exists, remove it first
+                        os.remove(dst)
+                    
+                    # Move file
+                    shutil.move(src, dst)
+                
+                # Remove the now-empty subdirectory
+                os.rmdir(subdir_path)
+                logger.info(f"Successfully flattened dataset structure")
+                
+        except Exception as e:
+            logger.warning(f"Failed to flatten dataset directory: {e}")
+            # Don't raise error, continue with original structure
     
     def generate_config(self, params: Dict[str, Any], dataset_path: str) -> str:
         """Generate command-line arguments for FLUX DreamBooth training"""

@@ -81,7 +81,7 @@ class DreamBoothTrainingHandler:
             if field not in input_data:
                 raise ValueError(f"Missing required field: {field}")
         
-        # Set defaults for optional parameters
+        # Set defaults for optional parameters (only supported by FLUX DreamBooth)
         defaults = {
             # Basic settings
             "model_type": "flux",
@@ -95,8 +95,6 @@ class DreamBoothTrainingHandler:
             "batch_size": 1,
             "gradient_accumulation_steps": 1,
             "resolution": "1024x1024",
-            "max_bucket_resolution": 2048,
-            "min_bucket_resolution": 256,
             
             # DreamBooth settings
             "train_text_encoder": True,
@@ -105,36 +103,11 @@ class DreamBoothTrainingHandler:
             "num_class_images": 50,
             
             # Optimizer settings
-            "optimizer": "AdamW8bit",
             "lr_scheduler": "constant",
-            "lr_warmup_steps": 0,
             
-            # Memory optimization
-            "fp8_base": True,
-            "cache_latents": True,
-            "cache_text_encoder_outputs": True,
+            # Memory optimization (only supported ones)
             "gradient_checkpointing": True,
-            
-            # Sampling
-            "sample_every_n_steps": 200,
-            "sample_prompts": [],
-            "guidance_scale": 3.5,
-            "sample_steps": 20,
-            
-            # Saving
-            "save_every_n_steps": 200,
-            "save_model_as": "safetensors",
-            
-            # Advanced settings
-            "noise_offset": 0.05,
-            "min_snr_gamma": 7,
             "mixed_precision": "bf16",
-            "seed": 42,
-            
-            # FLUX specific
-            "blocks_to_swap": None,
-            "apply_t5_attention_mask": True,
-            "max_sequence_length": 512,
             
             # Model caching and download settings
             "download_to_network_storage": False,
@@ -219,8 +192,8 @@ class DreamBoothTrainingHandler:
             "--pretrained_model_name_or_path", self._get_model_path(params["base_model"], params),
             "--instance_data_dir", dataset_path,
             "--output_dir", output_dir,
-            "--instance_prompt", f'"{params.get("instance_prompt", "")}"',
-            "--class_prompt", f'"{params.get("class_prompt", "")}"',
+            "--instance_prompt", params.get("instance_prompt", ""),
+            "--class_prompt", params.get("class_prompt", ""),
             "--train_text_encoder",
             "--with_prior_preservation",
             "--prior_loss_weight", str(params.get("prior_loss_weight", 1.0)),
@@ -232,7 +205,6 @@ class DreamBoothTrainingHandler:
             "--lr_scheduler", params["lr_scheduler"],
             "--num_train_epochs", str(params["steps"] // params["batch_size"]),
             "--mixed_precision", params["mixed_precision"],
-            "--save_model_every_n_steps", str(params["save_every_n_steps"]),
         ]
         
         # Add optional parameters (only those supported by FLUX DreamBooth)
@@ -240,11 +212,11 @@ class DreamBoothTrainingHandler:
             cmd_args.append("--gradient_checkpointing")
         
         # Save command to file for execution
-        config_filename = f"{model_name}_cmd.txt"
+        config_filename = f"{model_name}_cmd.json"
         config_path = os.path.join(CONFIG_PATH, config_filename)
         
         with open(config_path, 'w') as f:
-            f.write(" ".join(cmd_args))
+            json.dump(cmd_args, f)
         
         logger.info(f"Command saved to {config_path}")
         return config_path
@@ -424,10 +396,7 @@ class DreamBoothTrainingHandler:
         try:
             # Read the command from the config file
             with open(config_path, 'r') as f:
-                cmd_str = f.read().strip()
-            
-            # Parse command into list
-            cmd = cmd_str.split()
+                cmd = json.load(f)
             logger.info(f"Running FLUX DreamBooth command: {' '.join(cmd)}")
             
             # Prepare environment with HuggingFace authentication
@@ -569,6 +538,7 @@ def handler(job):
     # Updated: 2025-01-08 - Fixed to use official FLUX DreamBooth train_dreambooth_flux.py script
     # Updated: 2025-01-08 - Added FLUX DreamBooth script download and fixed script path
     # Updated: 2025-01-08 - Fixed prompt quoting and removed unsupported arguments
+    # Updated: 2025-01-08 - Fixed command serialization to preserve prompt arguments properly
     try:
         job_input = job["input"]
         logger.info(f"Received job with input keys: {list(job_input.keys())}")

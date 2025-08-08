@@ -39,7 +39,7 @@ def get_api_credentials() -> tuple[Optional[str], Optional[str], Optional[str]]:
     
     return RUNPOD_ENDPOINT, RUNPOD_API_KEY, HUGGINGFACE_TOKEN
 
-def create_dreambooth_payload():
+def create_dreambooth_payload(hf_token: str):
     """Create the DreamBooth training payload for RunPod"""
     
     # Encode the test.zip file
@@ -68,34 +68,11 @@ def create_dreambooth_payload():
             "num_class_images": 50,
             
             # Memory optimization for RunPod
-            "fp8_base": True,
             "gradient_checkpointing": True,
-            "cache_latents": True,
-            "cache_text_encoder_outputs": True,
             "mixed_precision": "bf16",
             
-            # Sampling settings
-            "sample_every_n_steps": 100,  # Sample every 100 steps
-            "sample_prompts": [
-                "a photo of testsubject",
-                "testsubject smiling",
-                "a professional photo of testsubject",
-                "testsubject in different lighting"
-            ],
-            "guidance_scale": 3.5,
-            "sample_steps": 20,
-            
-            # Save settings for network storage
-            "save_every_n_steps": 200,
-            "save_model_as": "safetensors",
-            
-            # Advanced settings
-            "noise_offset": 0.05,
-            "min_snr_gamma": 7,
-            "seed": 42,
-            
             # Environment configuration for RunPod
-            "huggingface_token": HUGGINGFACE_TOKEN,
+            "huggingface_token": hf_token,
         }
     }
     
@@ -115,7 +92,7 @@ def test_dreambooth_training():
         return False
     
     # Create payload
-    payload = create_dreambooth_payload()
+    payload = create_dreambooth_payload(HUGGINGFACE_TOKEN)
     
     # Set up headers
     headers = {

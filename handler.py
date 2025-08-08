@@ -207,106 +207,55 @@ class DreamBoothTrainingHandler:
             raise ValueError(f"Invalid dataset format: {e}")
     
     def generate_config(self, params: Dict[str, Any], dataset_path: str) -> str:
-        """Generate YAML configuration file for DreamBooth training"""
+        """Generate command-line arguments for FLUX DreamBooth training"""
         
         model_name = params["model_name"]
         output_dir = os.path.join(OUTPUT_PATH, model_name)
         os.makedirs(output_dir, exist_ok=True)
         
-        # Build configuration dictionary for FLUX DreamBooth
-        config = {
-            "job": "dreambooth",
-            "config": {
-                "name": model_name,
-                "process": [
-                    {
-                        "type": "dreambooth_trainer",  # Use dreambooth_trainer instead of sd_trainer
-                        "training_folder": output_dir,
-                        "device": "cuda:0",
-                        
-                        # FLUX DreamBooth specific settings
-                        "instance_prompt": params.get("instance_prompt", ""),
-                        "class_prompt": params.get("class_prompt", ""),
-                        "train_text_encoder": params.get("train_text_encoder", True),
-                        "with_prior_preservation": params.get("with_prior_preservation", True),
-                        "prior_loss_weight": params.get("prior_loss_weight", 1.0),
-                        "num_class_images": params.get("num_class_images", 50),
-                        
-                        "save": {
-                            "dtype": params["mixed_precision"],
-                            "save_every": params["save_every_n_steps"],
-                            "max_step_saves_to_keep": 3,
-                        },
-                        "datasets": [
-                            {
-                                "folder_path": dataset_path,
-                                "caption_ext": "txt",
-                                "caption_dropout_rate": 0.0,
-                                "shuffle_tokens": False,
-                                "cache_latents_to_disk": params["cache_latents"],
-                                "resolution": self._parse_resolution(params["resolution"]),
-                            }
-                        ],
-                        "train": {
-                            "batch_size": params["batch_size"],
-                            "steps": params["steps"],
-                            "gradient_accumulation_steps": params["gradient_accumulation_steps"],
-                            "train_unet": True,
-                            "train_text_encoder": params.get("train_text_encoder", True),
-                            "gradient_checkpointing": params["gradient_checkpointing"],
-                            "optimizer": params["optimizer"],
-                            "lr": params["learning_rate"],
-                            "ema_config": {
-                                "use_ema": True,
-                                "ema_decay": 0.99,
-                            },
-                            "dtype": params["mixed_precision"],
-                        },
-                        "model": {
-                            "name_or_path": self._get_model_path(params["base_model"], params),
-                            "is_flux": True,
-                            "quantize": params.get("fp8_base", False),
-                            "is_local": os.path.exists(self._get_model_path(params["base_model"], params)),
-                        },
-                        "sample": {
-                            "enabled": True,
-                            "every_n_steps": params["sample_every_n_steps"],
-                            "seed": params["seed"],
-                            "walk_seed": True,
-                            "guidance_scale": params["guidance_scale"],
-                            "sample_steps": params["sample_steps"],
-                            "prompts": self._generate_sample_prompts(params),
-                            "neg": "",
-                            "width": self._parse_resolution(params["resolution"])[0],
-                            "height": self._parse_resolution(params["resolution"])[1],
-                        },
-                    }
-                ]
-            }
-        }
+        # Build command-line arguments for FLUX DreamBooth
+        cmd_args = [
+            "python", "train_dreambooth_flux.py",
+            "--pretrained_model_name_or_path", self._get_model_path(params["base_model"], params),
+            "--instance_data_dir", dataset_path,
+            "--output_dir", output_dir,
+            "--instance_prompt", params.get("instance_prompt", ""),
+            "--class_prompt", params.get("class_prompt", ""),
+            "--train_text_encoder",
+            "--with_prior_preservation",
+            "--prior_loss_weight", str(params.get("prior_loss_weight", 1.0)),
+            "--num_class_images", str(params.get("num_class_images", 50)),
+            "--resolution", params["resolution"],
+            "--train_batch_size", str(params["batch_size"]),
+            "--gradient_accumulation_steps", str(params["gradient_accumulation_steps"]),
+            "--learning_rate", str(params["learning_rate"]),
+            "--lr_scheduler", params["lr_scheduler"],
+            "--num_train_epochs", str(params["steps"] // params["batch_size"]),
+            "--mixed_precision", params["mixed_precision"],
+            "--save_model_every_n_steps", str(params["save_every_n_steps"]),
+        ]
         
-        # Add advanced training parameters
+        # Add optional parameters
         if params.get("noise_offset", 0) > 0:
-            config["config"]["process"][0]["train"]["noise_offset"] = params["noise_offset"]
+            cmd_args.extend(["--noise_offset", str(params["noise_offset"])])
         
         if params.get("min_snr_gamma"):
-            config["config"]["process"][0]["train"]["min_snr_gamma"] = params["min_snr_gamma"]
+            cmd_args.extend(["--min_snr_gamma", str(params["min_snr_gamma"])])
         
-        # FLUX specific settings
-        if params.get("apply_t5_attention_mask"):
-            config["config"]["process"][0]["model"]["apply_t5_attention_mask"] = True
+        if params.get("gradient_checkpointing"):
+            cmd_args.append("--gradient_checkpointing")
         
-        if params.get("max_sequence_length"):
-            config["config"]["process"][0]["model"]["max_sequence_length"] = params["max_sequence_length"]
+        if params.get("fp8_base"):
+            cmd_args.append("--fp8")
         
-        # Save configuration file
-        config_filename = f"{model_name}_config.yaml"
+        # Save command to file for execution
+        config_filename = f"{model_name}_cmd.txt"
         config_path = os.path.join(CONFIG_PATH, config_filename)
         
         with open(config_path, 'w') as f:
-            yaml.dump(config, f, default_flow_style=False, indent=2)
+            f.write(" ".join(cmd_args))
         
-        logger.info(f"Configuration saved to {config_path}")
+        logger.info(f"Command saved to {config_path}")
         return config_path
     
     def _parse_resolution(self, resolution: str) -> List[int]:
@@ -480,12 +429,15 @@ class DreamBoothTrainingHandler:
         return prompts
     
     def run_training(self, config_path: str) -> Dict[str, Any]:
-        """Execute the training process"""
+        """Execute FLUX DreamBooth training process"""
         try:
-            # Change to ai-toolkit directory
-            original_dir = os.getcwd()
-            if os.path.exists(AI_TOOLKIT_PATH):
-                os.chdir(AI_TOOLKIT_PATH)
+            # Read the command from the config file
+            with open(config_path, 'r') as f:
+                cmd_str = f.read().strip()
+            
+            # Parse command into list
+            cmd = cmd_str.split()
+            logger.info(f"Running FLUX DreamBooth command: {' '.join(cmd)}")
             
             # Prepare environment with HuggingFace authentication
             env = os.environ.copy()
@@ -515,10 +467,6 @@ class DreamBoothTrainingHandler:
                 else:
                     logger.warning(f"HuggingFace login failed: {login_process.stderr}")
             
-            # Run training command
-            cmd = [sys.executable, "run.py", config_path]
-            logger.info(f"Running training command: {' '.join(cmd)}")
-            
             # Execute training with environment
             process = subprocess.Popen(
                 cmd,
@@ -540,13 +488,10 @@ class DreamBoothTrainingHandler:
             # Wait for completion
             return_code = process.wait()
             
-            # Restore original directory
-            os.chdir(original_dir)
-            
             if return_code != 0:
                 raise subprocess.CalledProcessError(return_code, cmd)
             
-            logger.info("Training completed successfully")
+            logger.info("FLUX DreamBooth training completed successfully")
             return {
                 "status": "success",
                 "output": output_lines[-50:] if len(output_lines) > 50 else output_lines  # Last 50 lines
@@ -630,6 +575,7 @@ def handler(job):
     # Updated: 2025-01-08 - Fixed subprocess environment and added HF login
     # Updated: 2025-01-08 - Removed all scheduler configurations to let FLUX use internal scheduler
     # Updated: 2025-01-08 - Converted from LoRA to DreamBooth training
+    # Updated: 2025-01-08 - Fixed to use official FLUX DreamBooth train_dreambooth_flux.py script
     try:
         job_input = job["input"]
         logger.info(f"Received job with input keys: {list(job_input.keys())}")

@@ -709,10 +709,40 @@ def handler(job):
             
             if directories:
                 logger.error(f"Found directories in dataset folder: {directories}")
-                return {
-                    "error": f"Dataset folder contains directories: {directories}. Please ensure only image files are present.",
-                    "status": "failed"
-                }
+                logger.info("Attempting to clean up directories automatically...")
+                
+                # Clean up directories
+                for directory in directories:
+                    dir_path = os.path.join(dataset_path, directory)
+                    try:
+                        logger.info(f"Removing directory: {directory}")
+                        shutil.rmtree(dir_path)
+                        logger.info(f"Successfully removed directory: {directory}")
+                    except Exception as e:
+                        logger.error(f"Error removing directory {directory}: {e}")
+                        return {
+                            "error": f"Failed to remove directory {directory}: {e}",
+                            "status": "failed"
+                        }
+                
+                # Verify cleanup
+                try:
+                    final_items = os.listdir(dataset_path)
+                    final_dirs = [item for item in final_items if os.path.isdir(os.path.join(dataset_path, item))]
+                    if final_dirs:
+                        logger.error(f"Still found directories after cleanup: {final_dirs}")
+                        return {
+                            "error": f"Failed to clean up all directories. Remaining: {final_dirs}",
+                            "status": "failed"
+                        }
+                    else:
+                        logger.info(f"Cleanup successful. Final contents: {final_items}")
+                except Exception as e:
+                    logger.error(f"Error verifying cleanup: {e}")
+                    return {
+                        "error": f"Error verifying cleanup: {e}",
+                        "status": "failed"
+                    }
                 
         except Exception as e:
             logger.error(f"Error listing dataset folder: {e}")

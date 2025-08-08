@@ -256,7 +256,7 @@ class LoRATrainingHandler:
                             "train_unet": True,
                             "train_text_encoder": False,
                             "gradient_checkpointing": params["gradient_checkpointing"],
-                            "noise_scheduler": "flowmatch",
+                            # Removed noise_scheduler - let FLUX use its internal scheduler
                             "optimizer": params["optimizer"],
                             "lr": params["learning_rate"],
                             "ema_config": {
@@ -630,7 +630,7 @@ def handler(job):
     """Main RunPod handler function"""
     # Updated: 2025-01-08 - Enhanced HuggingFace token handling for FLUX training
     # Updated: 2025-01-08 - Fixed subprocess environment and added HF login
-    # Updated: 2025-01-08 - Removed sampler configuration to let FLUX use internal scheduler
+    # Updated: 2025-01-08 - Removed all scheduler configurations to let FLUX use internal scheduler
     try:
         job_input = job["input"]
         logger.info(f"Received job with input keys: {list(job_input.keys())}")

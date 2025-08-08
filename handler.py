@@ -260,6 +260,11 @@ class DreamBoothTrainingHandler:
         if params.get("gradient_checkpointing"):
             cmd_args.append("--gradient_checkpointing")
         
+        # Add device management for FLUX to avoid device mismatch errors
+        cmd_args.extend([
+            "--dataloader_num_workers", "0",  # Reduce worker processes to avoid device issues
+        ])
+        
         # Save command to file for execution
         config_filename = f"{model_name}_cmd.json"
         config_path = os.path.join(CONFIG_PATH, config_filename)
@@ -460,6 +465,11 @@ class DreamBoothTrainingHandler:
                 logger.info("HuggingFace token configured for subprocess")
             else:
                 logger.warning("No HuggingFace token found in environment")
+            
+            # Add device management environment variables
+            env["CUDA_VISIBLE_DEVICES"] = "0"
+            env["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:512"
+            logger.info("Device management environment variables configured")
             
             # Run HuggingFace login first to ensure authentication
             if hf_token:

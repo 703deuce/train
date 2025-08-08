@@ -671,12 +671,28 @@ def handler(job):
         params = trainer.validate_input(job_input)
         logger.info(f"Validated parameters for model: {params['model_name']}")
         
-        # Process dataset
-        dataset_path = trainer.process_dataset(
-            params["dataset"], 
-            params["model_name"]
-        )
-        logger.info(f"Dataset processed at: {dataset_path}")
+        # Use existing dataset folder directly
+        dataset_path = os.path.join(DATASETS_PATH, params["model_name"])
+        logger.info(f"Using existing dataset at: {dataset_path}")
+        
+        # Check if dataset folder exists
+        if not os.path.exists(dataset_path):
+            logger.error(f"Dataset folder not found: {dataset_path}")
+            return {
+                "error": f"Dataset folder not found: {dataset_path}",
+                "status": "failed"
+            }
+        
+        # List contents of dataset folder for debugging
+        try:
+            items = os.listdir(dataset_path)
+            logger.info(f"Found {len(items)} items in dataset folder: {items}")
+        except Exception as e:
+            logger.error(f"Error listing dataset folder: {e}")
+            return {
+                "error": f"Error accessing dataset folder: {e}",
+                "status": "failed"
+            }
         
         # Generate configuration
         config_path = trainer.generate_config(params, dataset_path)

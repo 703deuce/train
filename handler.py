@@ -203,13 +203,17 @@ class DreamBoothTrainingHandler:
             "--gradient_accumulation_steps", str(params["gradient_accumulation_steps"]),
             "--learning_rate", str(params["learning_rate"]),
             "--lr_scheduler", params["lr_scheduler"],
-            "--num_train_epochs", str(params["steps"] // params["batch_size"]),
+            "--num_train_epochs", str(params["steps"]),
             "--mixed_precision", params["mixed_precision"],
         ]
         
         # Add optional parameters (only those supported by FLUX DreamBooth)
         if params.get("gradient_checkpointing"):
             cmd_args.append("--gradient_checkpointing")
+        
+        # Add class data directory if specified
+        if params.get("class_data_dir"):
+            cmd_args.extend(["--class_data_dir", params["class_data_dir"]])
         
         # Save command to file for execution
         config_filename = f"{model_name}_cmd.json"

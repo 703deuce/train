@@ -215,7 +215,7 @@ class DreamBoothTrainingHandler:
         
         # Build command-line arguments for FLUX DreamBooth
         cmd_args = [
-            "python", "train_dreambooth_flux.py",
+            "python", "/workspace/train_dreambooth_flux.py",
             "--pretrained_model_name_or_path", self._get_model_path(params["base_model"], params),
             "--instance_data_dir", dataset_path,
             "--output_dir", output_dir,
@@ -225,7 +225,7 @@ class DreamBoothTrainingHandler:
             "--with_prior_preservation",
             "--prior_loss_weight", str(params.get("prior_loss_weight", 1.0)),
             "--num_class_images", str(params.get("num_class_images", 50)),
-            "--resolution", params["resolution"],
+            "--resolution", str(self._parse_resolution(params["resolution"])[0]),
             "--train_batch_size", str(params["batch_size"]),
             "--gradient_accumulation_steps", str(params["gradient_accumulation_steps"]),
             "--learning_rate", str(params["learning_rate"]),
@@ -576,6 +576,7 @@ def handler(job):
     # Updated: 2025-01-08 - Removed all scheduler configurations to let FLUX use internal scheduler
     # Updated: 2025-01-08 - Converted from LoRA to DreamBooth training
     # Updated: 2025-01-08 - Fixed to use official FLUX DreamBooth train_dreambooth_flux.py script
+    # Updated: 2025-01-08 - Added FLUX DreamBooth script download and fixed script path
     try:
         job_input = job["input"]
         logger.info(f"Received job with input keys: {list(job_input.keys())}")

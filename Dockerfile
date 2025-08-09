@@ -55,6 +55,7 @@ RUN wget https://github.com/huggingface/diffusers/raw/main/examples/dreambooth/t
 # Copy our handler and requirements
 COPY requirements.txt /workspace/
 COPY handler.py /workspace/
+COPY device_fix_wrapper.py /workspace/
 
 # Install our additional requirements
 RUN pip install -r /workspace/requirements.txt

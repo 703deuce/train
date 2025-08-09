@@ -1,9 +1,2 @@
-accelerate>=0.31.0
-torchvision
-transformers>=4.41.2
-ftfy
-tensorboard
-Jinja2
-peft>=0.11.1
-sentencepiece
-deepspeed>=0.12.0
+# Core packages are installed from main requirements.txt
+# Only FLUX-specific packages here

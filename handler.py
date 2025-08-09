@@ -505,8 +505,12 @@ class DreamBoothTrainingHandler:
         try:
             # Read the command from the config file
             with open(config_path, 'r') as f:
-                cmd = json.load(f)
-            logger.info(f"Running FLUX DreamBooth command: {' '.join(cmd)}")
+                cmd_args = json.load(f)
+            logger.info(f"Running FLUX DreamBooth command: {' '.join(cmd_args)}")
+            
+            # Validate that cmd_args is a list
+            if not isinstance(cmd_args, list):
+                raise ValueError(f"Expected list for command arguments, got {type(cmd_args)}")
             
             # Prepare environment with HuggingFace authentication
             env = os.environ.copy()
@@ -566,6 +570,7 @@ class DreamBoothTrainingHandler:
             
             # Run the training command
             try:
+                logger.info(f"Starting training with command: {' '.join(cmd_args)}")
                 result = subprocess.run(
                     cmd_args,
                     capture_output=True,
@@ -588,6 +593,10 @@ class DreamBoothTrainingHandler:
             except subprocess.CalledProcessError as e:
                 logger.error(f"Training failed: {e}")
                 raise
+            except Exception as e:
+                logger.error(f"Unexpected error during training: {e}")
+                logger.error(f"Error type: {type(e)}")
+                raise
             
             logger.info("FLUX DreamBooth training completed successfully")
             return {
@@ -598,10 +607,12 @@ class DreamBoothTrainingHandler:
             
         except Exception as e:
             logger.error(f"Training failed: {e}")
+            logger.error(f"Error type: {type(e)}")
             logger.error(f"Traceback: {traceback.format_exc()}")
             return {
                 "status": "error",
                 "error": str(e),
+                "error_type": str(type(e)),
                 "traceback": traceback.format_exc()
             }
     

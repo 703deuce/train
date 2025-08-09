@@ -309,10 +309,6 @@ class DreamBoothTrainingHandler:
             
             cmd_args.extend(["--class_data_dir", class_data_dir])
         
-        # Add optional parameters (only those supported by FLUX DreamBooth)
-        if params.get("gradient_checkpointing"):
-            cmd_args.append("--gradient_checkpointing")
-        
         # Add validation parameters for better training monitoring
         cmd_args.extend([
             "--validation_prompt", params.get("instance_prompt", ""),

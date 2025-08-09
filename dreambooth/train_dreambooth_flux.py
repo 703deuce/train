@@ -1453,18 +1453,6 @@ def main(args):
         collate_fn=lambda examples: collate_fn(examples, args.with_prior_preservation, device=accelerator.device),
         num_workers=args.dataloader_num_workers,
     )
-    
-    # Fix for CUDA generator issue - ensure DataLoader generator is on correct device
-    if torch.cuda.is_available():
-        # Force the DataLoader's random generator to use CUDA
-        train_dataloader.generator = torch.Generator(device='cuda')
-        print("Fixed DataLoader generator to use CUDA device")
-    elif is_torch_npu_available():
-        # Force the DataLoader's random generator to use NPU
-        train_dataloader.generator = torch.Generator(device='npu')
-        print("Fixed DataLoader generator to use NPU device")
-    else:
-        print("Using CPU generator for DataLoader")
 
     if not args.train_text_encoder:
         tokenizers = [tokenizer_one, tokenizer_two]
@@ -1570,6 +1558,18 @@ def main(args):
         transformer, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
             transformer, optimizer, train_dataloader, lr_scheduler
         )
+
+    # Fix for CUDA generator issue - ensure DataLoader generator is on correct device AFTER accelerator.prepare()
+    if torch.cuda.is_available():
+        # Force the DataLoader's random generator to use CUDA
+        train_dataloader.generator = torch.Generator(device='cuda')
+        print("Fixed DataLoader generator to use CUDA device (after accelerator.prepare)")
+    elif is_torch_npu_available():
+        # Force the DataLoader's random generator to use NPU
+        train_dataloader.generator = torch.Generator(device='npu')
+        print("Fixed DataLoader generator to use NPU device (after accelerator.prepare)")
+    else:
+        print("Using CPU generator for DataLoader (after accelerator.prepare)")
 
     # We need to recalculate our total training steps as the size of the training dataloader may have changed.
     num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)

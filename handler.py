@@ -285,6 +285,10 @@ class DreamBoothTrainingHandler:
             "--lr_warmup_steps", "0",
             "--max_train_steps", str(params["steps"]),
             "--train_text_encoder",
+            "--logging_dir", "logs",
+            "--max_sequence_length", "512",
+            "--dataloader_num_workers", "0",
+            "--gradient_checkpointing",
         ]
         
         # Add prior preservation if enabled

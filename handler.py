@@ -73,6 +73,102 @@ class DreamBoothTrainingHandler:
         except Exception as e:
             logger.error(f"Failed to setup environment: {e}")
     
+    def create_deepspeed_config(self, params: Dict[str, Any]) -> str:
+        """Create DeepSpeed configuration for 8GB GPU training"""
+        # DeepSpeed will be installed on RunPod serverless environment
+        logger.info("Creating DeepSpeed configuration for 8GB GPU optimization")
+        
+        deepspeed_config = {
+            "train_batch_size": params.get("batch_size", 1),
+            "gradient_accumulation_steps": params.get("gradient_accumulation_steps", 1),
+            "optimizer": {
+                "type": "AdamW",
+                "params": {
+                    "lr": params.get("learning_rate", 2e-6),
+                    "betas": [0.9, 0.999],
+                    "eps": 1e-8,
+                    "weight_decay": 0.01
+                }
+            },
+            "scheduler": {
+                "type": "WarmupLR",
+                "params": {
+                    "warmup_min_lr": 0,
+                    "warmup_max_lr": params.get("learning_rate", 2e-6),
+                    "warmup_num_steps": 0
+                }
+            },
+            "fp16": {
+                "enabled": True,
+                "loss_scale": 0,
+                "loss_scale_window": 1000,
+                "initial_scale_power": 16,
+                "hysteresis": 2,
+                "min_loss_scale": 1
+            },
+            "zero_optimization": {
+                "stage": 2,
+                "offload_optimizer": {
+                    "device": "cpu",
+                    "pin_memory": True
+                },
+                "offload_param": {
+                    "device": "cpu",
+                    "pin_memory": True
+                },
+                "allgather_partitions": True,
+                "allgather_bucket_size": 2e8,
+                "overlap_comm": True,
+                "reduce_scatter": True,
+                "reduce_bucket_size": 2e8,
+                "contiguous_gradients": True
+            },
+            "gradient_clipping": 1.0,
+            "steps_per_print": 10,
+            "wall_clock_breakdown": False
+        }
+        
+        # Save DeepSpeed config
+        config_filename = f"deepspeed_config_{params['model_name']}.json"
+        config_path = os.path.join(CONFIG_PATH, config_filename)
+        
+        with open(config_path, 'w') as f:
+            json.dump(deepspeed_config, f, indent=2)
+        
+        logger.info(f"DeepSpeed config saved to {config_path}")
+        return config_path
+    
+    def setup_accelerate_config(self) -> str:
+        """Setup accelerate configuration for DeepSpeed"""
+        # Always use DeepSpeed for 8GB GPU optimization
+        accelerate_config = {
+            "compute_environment": "LOCAL_MACHINE",
+            "distributed_type": "DEEPSPEED",
+            "downcast_bf16": "no",
+            "gpu_ids": "all",
+            "machine_rank": 0,
+            "main_training_function": "main",
+            "mixed_precision": "fp16",
+            "num_machines": 1,
+            "num_processes": 1,
+            "rdzv_backend": "static",
+            "same_network": True,
+            "tpu_env": [],
+            "tpu_use_cluster": False,
+            "tpu_use_sudo": False,
+            "use_cpu": False
+        }
+        logger.info("Using DeepSpeed accelerate configuration for 8GB GPU optimization")
+        
+        # Save accelerate config
+        config_path = os.path.join(CONFIG_PATH, "accelerate_config.yaml")
+        
+        with open(config_path, 'w') as f:
+            yaml.dump(accelerate_config, f, default_flow_style=False)
+        
+        logger.info(f"Accelerate config saved to {config_path}")
+        return config_path
+    
     def validate_input(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """Validate and sanitize input parameters"""
         required_fields = ["model_name", "dataset"]
@@ -107,11 +203,14 @@ class DreamBoothTrainingHandler:
             
             # Memory optimization (only supported ones)
             "gradient_checkpointing": True,
-            "mixed_precision": "bf16",
+            "mixed_precision": "fp16",  # Changed to fp16 for DeepSpeed compatibility
             
             # Model caching and download settings
             "download_to_network_storage": False,
             "model_cache_dir": "",
+            
+            # DeepSpeed settings
+            "use_deepspeed": True,  # Enable DeepSpeed by default for 8GB GPU
         }
         
         # Merge defaults with input
@@ -261,21 +360,48 @@ class DreamBoothTrainingHandler:
             # Don't raise error, continue with original structure
 
     def generate_config(self, params: Dict[str, Any], dataset_path: str) -> str:
-        """Generate command-line arguments for FLUX DreamBooth training"""
+        """Generate command-line arguments for FLUX DreamBooth training with DeepSpeed"""
         
         model_name = params["model_name"]
         output_dir = os.path.join(OUTPUT_PATH, model_name)
         os.makedirs(output_dir, exist_ok=True)
         
+        # Always create DeepSpeed and Accelerate configs for 8GB GPU optimization
+        deepspeed_config_path = self.create_deepspeed_config(params)
+        self.setup_accelerate_config()
+        
         # Build command-line arguments for FLUX DreamBooth training
-        # Use only bare minimum required arguments
         cmd_args = [
-            "accelerate", "launch", "/workspace/dreambooth/train_dreambooth_flux.py",
+            "accelerate", "launch", "--config_file", os.path.join(CONFIG_PATH, "accelerate_config.yaml"), "/workspace/dreambooth/train_dreambooth_flux.py",
             "--pretrained_model_name_or_path", self._get_model_path(params["base_model"], params),
             "--instance_data_dir", dataset_path,
             "--output_dir", output_dir,
             "--instance_prompt", params.get("instance_prompt", ""),
+            "--resolution", params.get("resolution", "1024x1024"),
+            "--train_batch_size", str(params.get("batch_size", 1)),
+            "--gradient_accumulation_steps", str(params.get("gradient_accumulation_steps", 1)),
+            "--learning_rate", str(params.get("learning_rate", 2e-6)),
+            "--max_train_steps", str(params.get("steps", 2000)),
+            "--lr_scheduler", params.get("lr_scheduler", "constant"),
+            "--mixed_precision", params.get("mixed_precision", "fp16"),
+            "--gradient_checkpointing",
         ]
+        
+        # Always add DeepSpeed config for 8GB GPU optimization
+        if deepspeed_config_path:
+            cmd_args.extend(["--deepspeed", deepspeed_config_path])
+            logger.info(f"Added DeepSpeed config: {deepspeed_config_path}")
+        else:
+            logger.warning("DeepSpeed config not available, training may fail on 8GB GPU")
+        
+        # Add class data if prior preservation is enabled
+        if params.get("with_prior_preservation", True):
+            cmd_args.extend([
+                "--with_prior_preservation",
+                "--prior_loss_weight", str(params.get("prior_loss_weight", 1.0)),
+                "--num_class_images", str(params.get("num_class_images", 50)),
+                "--class_prompt", params.get("class_prompt", "a photo of a person"),
+            ])
         
         # Save command to file for execution
         config_filename = f"{model_name}_cmd.json"
@@ -285,6 +411,7 @@ class DreamBoothTrainingHandler:
             json.dump(cmd_args, f)
         
         logger.info(f"Command saved to {config_path}")
+        logger.info(f"Full command: {' '.join(cmd_args)}")
         return config_path
     
     def _parse_resolution(self, resolution: str) -> List[int]:
@@ -458,7 +585,7 @@ class DreamBoothTrainingHandler:
         return prompts
     
     def run_training(self, config_path: str) -> Dict[str, Any]:
-        """Execute FLUX DreamBooth training process"""
+        """Execute FLUX DreamBooth training process with DeepSpeed"""
         try:
             # Read the command from the config file
             with open(config_path, 'r') as f:
@@ -493,7 +620,12 @@ class DreamBoothTrainingHandler:
             env["TOKENIZERS_PARALLELISM"] = "false"  # Disable tokenizer parallelism
             env["PYTORCH_NO_CUDA_MEMORY_CACHING"] = "1"  # Disable CUDA memory caching
             env["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"  # Consistent device ordering
-            logger.info("Enhanced device management environment variables configured")
+            
+            # DeepSpeed specific environment variables
+            env["DS_SKIP_CUDA_CHECK"] = "0"  # Enable CUDA checks
+            env["DS_REPORT_BUG_MODE"] = "0"  # Disable bug reporting
+            env["DS_ACCELERATOR"] = "cuda"  # Use CUDA accelerator
+            logger.info("Enhanced device management and DeepSpeed environment variables configured")
             
             # Test that the training script can be imported and basic validation
             try:
@@ -714,6 +846,7 @@ def handler(job):
     # Updated: 2025-01-08 - Added FLUX DreamBooth script download and fixed script path
     # Updated: 2025-01-08 - Fixed prompt quoting and removed unsupported arguments
     # Updated: 2025-01-08 - Fixed command serialization to preserve prompt arguments properly
+    # Updated: 2025-01-08 - Added DeepSpeed configuration for 8GB GPU training
     try:
         job_input = job["input"]
         logger.info(f"Received job with input keys: {list(job_input.keys())}")

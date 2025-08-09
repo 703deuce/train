@@ -274,15 +274,17 @@ class DreamBoothTrainingHandler:
             "--instance_data_dir", dataset_path,
             "--output_dir", output_dir,
             "--instance_prompt", params.get("instance_prompt", ""),
-            "--class_prompt", params.get("class_prompt", ""),
-            "--train_text_encoder",
+            "--mixed_precision", params["mixed_precision"],
             "--resolution", str(self._parse_resolution(params["resolution"])[0]),
             "--train_batch_size", str(params["batch_size"]),
+            "--guidance_scale", "1",
             "--gradient_accumulation_steps", str(params["gradient_accumulation_steps"]),
-            "--learning_rate", str(params["learning_rate"]),
+            "--optimizer", "prodigy",
+            "--learning_rate", "1.0",
             "--lr_scheduler", params["lr_scheduler"],
-            "--max_train_steps", str(params["steps"]),  # Changed from num_train_epochs to max_train_steps
-            "--mixed_precision", params["mixed_precision"],
+            "--lr_warmup_steps", "0",
+            "--max_train_steps", str(params["steps"]),
+            "--train_text_encoder",
         ]
         
         # Add prior preservation if enabled
@@ -306,6 +308,13 @@ class DreamBoothTrainingHandler:
         # Add optional parameters (only those supported by FLUX DreamBooth)
         if params.get("gradient_checkpointing"):
             cmd_args.append("--gradient_checkpointing")
+        
+        # Add validation parameters for better training monitoring
+        cmd_args.extend([
+            "--validation_prompt", params.get("instance_prompt", ""),
+            "--validation_epochs", "25",
+            "--seed", "0",
+        ])
         
         # Save command to file for execution
         config_filename = f"{model_name}_cmd.json"

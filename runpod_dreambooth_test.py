@@ -55,12 +55,11 @@ def create_dreambooth_payload(hf_token: str):
             # Model and training settings
             "base_model": "flux1-dev", 
             "steps": 1000,  # As requested
-            "learning_rate": 2e-6,  # DreamBooth typically uses lower learning rate
             "batch_size": 1,
-            "gradient_accumulation_steps": 1,
+            "gradient_accumulation_steps": 4,  # Recommended value from docs
             "resolution": "1024x1024",
             
-            # FLUX DreamBooth specific settings
+            # FLUX DreamBooth specific settings (following official docs)
             "train_text_encoder": True,
             "with_prior_preservation": False,  # Disable prior preservation to avoid class data requirement
             

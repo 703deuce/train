@@ -598,15 +598,18 @@ class DreamBoothTrainingHandler:
                     logger.warning(f"Script help test stderr: {test_result.stderr[:500]}...")
                 
                 # Now run the actual training command
+                logger.info("Running accelerate command...")
                 result = subprocess.run(
                     cmd_args,
                     capture_output=True,
                     text=True,
                     env=env,
-                    cwd="/workspace"
+                    cwd="/workspace",
+                    timeout=300  # 5 minute timeout
                 )
                 
                 # Log the full output for debugging
+                logger.info(f"Accelerate command completed with return code: {result.returncode}")
                 if result.stdout:
                     logger.info(f"Training stdout: {result.stdout}")
                 if result.stderr:
@@ -619,21 +622,33 @@ class DreamBoothTrainingHandler:
                     # Try running without accelerate to see if that's the issue
                     logger.info("Trying to run script directly without accelerate...")
                     direct_cmd = ["python", "/workspace/dreambooth/train_dreambooth_flux.py"] + cmd_args[2:]  # Skip accelerate launch
-                    direct_result = subprocess.run(
-                        direct_cmd,
-                        capture_output=True,
-                        text=True,
-                        env=env,
-                        cwd="/workspace"
-                    )
-                    logger.info(f"Direct execution stdout: {direct_result.stdout}")
-                    if direct_result.stderr:
-                        logger.error(f"Direct execution stderr: {direct_result.stderr}")
+                    logger.info(f"Direct command: {' '.join(direct_cmd)}")
+                    
+                    try:
+                        direct_result = subprocess.run(
+                            direct_cmd,
+                            capture_output=True,
+                            text=True,
+                            env=env,
+                            cwd="/workspace",
+                            timeout=300  # 5 minute timeout
+                        )
+                        logger.info(f"Direct execution completed with return code: {direct_result.returncode}")
+                        logger.info(f"Direct execution stdout: {direct_result.stdout}")
+                        if direct_result.stderr:
+                            logger.error(f"Direct execution stderr: {direct_result.stderr}")
+                    except subprocess.TimeoutExpired:
+                        logger.error("Direct execution timed out after 5 minutes")
+                    except Exception as e:
+                        logger.error(f"Direct execution failed with exception: {e}")
                     
                     raise subprocess.CalledProcessError(result.returncode, cmd_args)
                     
             except subprocess.CalledProcessError as e:
                 logger.error(f"Training failed: {e}")
+                raise
+            except subprocess.TimeoutExpired:
+                logger.error("Training command timed out after 5 minutes")
                 raise
             except Exception as e:
                 logger.error(f"Unexpected error during training: {e}")
@@ -646,7 +661,7 @@ class DreamBoothTrainingHandler:
                 "output": result.stdout.splitlines()[-50:] if result.stdout else [],  # Last 50 lines
                 "error": result.stderr
             }
-            
+        
         except Exception as e:
             logger.error(f"Training failed: {e}")
             logger.error(f"Error type: {type(e)}")

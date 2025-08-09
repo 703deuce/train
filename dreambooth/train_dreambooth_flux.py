@@ -1040,6 +1040,16 @@ def main(args):
             "Mixed precision training with bfloat16 is not supported on MPS. Please use fp16 (recommended) or fp32 instead."
         )
 
+    # Set default device early to ensure all operations use the correct device
+    if torch.cuda.is_available():
+        torch.set_default_device('cuda')
+        print("Set default device to CUDA")
+    elif is_torch_npu_available():
+        torch.set_default_device('npu')
+        print("Set default device to NPU")
+    else:
+        print("Using CPU as default device")
+
     logging_dir = Path(args.output_dir, args.logging_dir)
 
     accelerator_project_config = ProjectConfiguration(project_dir=args.output_dir, logging_dir=logging_dir)
@@ -1625,7 +1635,9 @@ def main(args):
                 )
 
                 # Sample noise that we'll add to the latents
-                noise = torch.randn_like(model_input)
+                # Ensure model_input is on the correct device
+                model_input = model_input.to(device=accelerator.device)
+                noise = torch.randn_like(model_input, device=accelerator.device)
                 bsz = model_input.shape[0]
 
                 # Sample a random timestep for each image

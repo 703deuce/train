@@ -536,6 +536,21 @@ class DreamBoothTrainingHandler:
             
             # Test that the training script can be imported and basic validation
             try:
+                # Check if script file exists
+                script_path = "/workspace/dreambooth/train_dreambooth_flux.py"
+                if os.path.exists(script_path):
+                    logger.info(f"Training script found at: {script_path}")
+                    logger.info(f"Script file size: {os.path.getsize(script_path)} bytes")
+                else:
+                    logger.error(f"Training script not found at: {script_path}")
+                    # List contents of dreambooth directory
+                    dreambooth_dir = "/workspace/dreambooth"
+                    if os.path.exists(dreambooth_dir):
+                        files = os.listdir(dreambooth_dir)
+                        logger.info(f"Files in dreambooth directory: {files}")
+                    else:
+                        logger.error(f"Dreambooth directory not found: {dreambooth_dir}")
+                
                 test_result = subprocess.run(
                     ["python", "-c", "import sys; sys.path.append('/workspace/dreambooth'); import train_dreambooth_flux; print('Script import successful')"],
                     capture_output=True,
@@ -567,6 +582,22 @@ class DreamBoothTrainingHandler:
             # Run the training command
             try:
                 logger.info(f"Starting training with command: {' '.join(cmd_args)}")
+                
+                # First, let's test if the script can be run directly without accelerate
+                logger.info("Testing direct script execution...")
+                test_cmd = ["python", "/workspace/dreambooth/train_dreambooth_flux.py", "--help"]
+                test_result = subprocess.run(
+                    test_cmd,
+                    capture_output=True,
+                    text=True,
+                    env=env,
+                    cwd="/workspace"
+                )
+                logger.info(f"Script help test stdout: {test_result.stdout[:500]}...")
+                if test_result.stderr:
+                    logger.warning(f"Script help test stderr: {test_result.stderr[:500]}...")
+                
+                # Now run the actual training command
                 result = subprocess.run(
                     cmd_args,
                     capture_output=True,

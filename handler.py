@@ -82,6 +82,8 @@ class DreamBoothTrainingHandler:
                     "weight_decay": 0.01
                 }
             },
+            # Use DeepSpeed's optimized Adam for better performance
+            "zero_allow_untested_optimizer": True,
             "scheduler": {
                 "type": "WarmupLR",
                 "params": {
@@ -179,8 +181,9 @@ class DreamBoothTrainingHandler:
             
             # Training parameters
             "steps": 2000,
-            "learning_rate": 2e-6,  # DreamBooth typically uses lower learning rate
+            "learning_rate": 5e-6,  # Official DreamBooth recommendation
             "batch_size": 1,
+            "sample_batch_size": 1,
             "gradient_accumulation_steps": 1,
             "resolution": "1024x1024",
             
@@ -192,10 +195,12 @@ class DreamBoothTrainingHandler:
             
             # Optimizer settings
             "lr_scheduler": "constant",
+            "lr_warmup_steps": 0,
             
             # Memory optimization (only supported ones)
             "gradient_checkpointing": True,
             "mixed_precision": "fp16",  # Changed to fp16 for DeepSpeed compatibility
+            "checkpointing_steps": 500,
             
             # Model caching and download settings
             "download_to_network_storage": False,
@@ -203,6 +208,9 @@ class DreamBoothTrainingHandler:
             
             # DeepSpeed settings
             "use_deepspeed": True,  # Enable DeepSpeed by default for 8GB GPU
+            
+            # Model upload settings
+            "push_to_hub": False,  # Set to True to upload model to HuggingFace Hub
         }
         
         # Merge defaults with input
@@ -371,12 +379,15 @@ class DreamBoothTrainingHandler:
             "--instance_prompt", params.get("instance_prompt", ""),
             "--resolution", params.get("resolution", "1024x1024"),
             "--train_batch_size", str(params.get("batch_size", 1)),
+            "--sample_batch_size", str(params.get("sample_batch_size", 1)),
             "--gradient_accumulation_steps", str(params.get("gradient_accumulation_steps", 1)),
             "--learning_rate", str(params.get("learning_rate", 2e-6)),
             "--max_train_steps", str(params.get("steps", 2000)),
             "--lr_scheduler", params.get("lr_scheduler", "constant"),
+            "--lr_warmup_steps", str(params.get("lr_warmup_steps", 0)),
             "--mixed_precision", params.get("mixed_precision", "fp16"),
             "--gradient_checkpointing",
+            "--checkpointing_steps", str(params.get("checkpointing_steps", 500)),
         ]
         
         # Always add DeepSpeed config for 8GB GPU optimization
@@ -394,6 +405,10 @@ class DreamBoothTrainingHandler:
                 "--num_class_images", str(params.get("num_class_images", 50)),
                 "--class_prompt", params.get("class_prompt", "a photo of a person"),
             ])
+        
+        # Add push_to_hub if requested
+        if params.get("push_to_hub", False):
+            cmd_args.append("--push_to_hub")
         
         # Save command to file for execution
         config_filename = f"{model_name}_cmd.json"

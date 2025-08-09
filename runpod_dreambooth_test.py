@@ -51,7 +51,6 @@ def create_dreambooth_payload(hf_token: str):
             "model_name": "test_flux_dreambooth_1000",
             "dataset": dataset_b64,  # Base64 encoded zip file
             "instance_prompt": "a photo of testsubject",  # DreamBooth instance prompt
-            "class_prompt": "a photo of a person",  # DreamBooth class prompt
             
             # Model and training settings
             "base_model": "flux1-dev", 
@@ -63,9 +62,7 @@ def create_dreambooth_payload(hf_token: str):
             
             # FLUX DreamBooth specific settings
             "train_text_encoder": True,
-            "with_prior_preservation": False,  # Disable prior preservation for now to avoid class data requirement
-            "prior_loss_weight": 1.0,
-            "num_class_images": 50,
+            "with_prior_preservation": False,  # Disable prior preservation to avoid class data requirement
             
             # Memory optimization for RunPod
             "gradient_checkpointing": True,
@@ -104,7 +101,6 @@ def test_dreambooth_training():
     print(f"🎯 Model name: {payload['input']['model_name']}")
     print(f"📊 Training steps: {payload['input']['steps']}")
     print(f"📝 Instance prompt: {payload['input']['instance_prompt']}")
-    print(f"📝 Class prompt: {payload['input']['class_prompt']}")
     
     try:
         # Send request

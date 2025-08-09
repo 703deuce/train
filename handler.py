@@ -269,7 +269,7 @@ class DreamBoothTrainingHandler:
         
         # Build command-line arguments for FLUX DreamBooth training
         cmd_args = [
-            "python", "/workspace/device_fix_wrapper.py", "/workspace/train_dreambooth_flux.py",
+            "accelerate", "launch", "/workspace/train_dreambooth_flux.py",
             "--pretrained_model_name_or_path", self._get_model_path(params["base_model"], params),
             "--instance_data_dir", dataset_path,
             "--output_dir", output_dir,
@@ -281,12 +281,12 @@ class DreamBoothTrainingHandler:
             "--gradient_accumulation_steps", str(params["gradient_accumulation_steps"]),
             "--learning_rate", str(params["learning_rate"]),
             "--lr_scheduler", params["lr_scheduler"],
-            "--num_train_epochs", str(params["steps"]),
+            "--max_train_steps", str(params["steps"]),  # Changed from num_train_epochs to max_train_steps
             "--mixed_precision", params["mixed_precision"],
         ]
         
         # Add prior preservation if enabled
-        if params.get("with_prior_preservation", True):
+        if params.get("with_prior_preservation", False):  # Changed from True to False
             cmd_args.extend([
                 "--with_prior_preservation",
                 "--prior_loss_weight", str(params.get("prior_loss_weight", 1.0)),
@@ -306,14 +306,6 @@ class DreamBoothTrainingHandler:
         # Add optional parameters (only those supported by FLUX DreamBooth)
         if params.get("gradient_checkpointing"):
             cmd_args.append("--gradient_checkpointing")
-        
-        # Add device management for FLUX to avoid device mismatch errors
-        cmd_args.extend([
-            "--dataloader_num_workers", "0",  # Reduce worker processes to avoid device issues
-            "--dataloader_pin_memory", "false",  # Disable pin memory to avoid device issues
-            "--max_grad_norm", "1.0",  # Limit gradient norm
-            "--seed", "42",  # Set fixed seed for reproducibility
-        ])
         
         # Save command to file for execution
         config_filename = f"{model_name}_cmd.json"
@@ -541,28 +533,6 @@ class DreamBoothTrainingHandler:
                     logger.info("HuggingFace login successful")
                 else:
                     logger.warning(f"HuggingFace login failed: {login_process.stderr}")
-            
-            # Run device check to ensure CUDA is properly initialized
-            device_check_cmd = [
-                sys.executable, "-c", 
-                "import torch; print('CUDA available:', torch.cuda.is_available()); "
-                "print('CUDA device count:', torch.cuda.device_count()); "
-                "if torch.cuda.is_available(): "
-                "print('Current device:', torch.cuda.current_device()); "
-                "print('Device name:', torch.cuda.get_device_name()); "
-                "torch.cuda.empty_cache(); print('CUDA cache cleared')"
-            ]
-            logger.info("Running device check...")
-            device_process = subprocess.run(
-                device_check_cmd,
-                capture_output=True,
-                text=True,
-                env=env
-            )
-            if device_process.returncode == 0:
-                logger.info(f"Device check successful: {device_process.stdout.strip()}")
-            else:
-                logger.warning(f"Device check failed: {device_process.stderr}")
             
             # Execute training with environment
             process = subprocess.Popen(

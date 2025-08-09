@@ -534,6 +534,21 @@ class DreamBoothTrainingHandler:
             env["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"  # Consistent device ordering
             logger.info("Enhanced device management environment variables configured")
             
+            # Test that the training script can be imported and basic validation
+            try:
+                test_result = subprocess.run(
+                    ["python", "-c", "import sys; sys.path.append('/workspace/dreambooth'); import train_dreambooth_flux; print('Script import successful')"],
+                    capture_output=True,
+                    text=True,
+                    env=env,
+                    cwd="/workspace"
+                )
+                logger.info(f"Script import test: {test_result.stdout}")
+                if test_result.stderr:
+                    logger.warning(f"Script import warnings: {test_result.stderr}")
+            except Exception as e:
+                logger.warning(f"Script import test failed: {e}")
+
             # Run HuggingFace login first to ensure authentication
             if hf_token:
                 login_cmd = [sys.executable, "-c", f"from huggingface_hub import login; login(token='{hf_token}')"]
@@ -549,34 +564,36 @@ class DreamBoothTrainingHandler:
                 else:
                     logger.warning(f"HuggingFace login failed: {login_process.stderr}")
             
-            # Execute training with environment
-            process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                universal_newlines=True,
-                bufsize=1,
-                env=env
-            )
-            
-            # Stream output
-            output_lines = []
-            for line in process.stdout:
-                line = line.strip()
-                if line:
-                    logger.info(f"Training: {line}")
-                    output_lines.append(line)
-            
-            # Wait for completion
-            return_code = process.wait()
-            
-            if return_code != 0:
-                raise subprocess.CalledProcessError(return_code, cmd)
+            # Run the training command
+            try:
+                result = subprocess.run(
+                    cmd_args,
+                    capture_output=True,
+                    text=True,
+                    env=env,
+                    cwd="/workspace"
+                )
+                
+                # Log the full output for debugging
+                if result.stdout:
+                    logger.info(f"Training stdout: {result.stdout}")
+                if result.stderr:
+                    logger.error(f"Training stderr: {result.stderr}")
+                
+                if result.returncode != 0:
+                    logger.error(f"Training failed with exit code {result.returncode}")
+                    logger.error(f"Command: {' '.join(cmd_args)}")
+                    raise subprocess.CalledProcessError(result.returncode, cmd_args)
+                    
+            except subprocess.CalledProcessError as e:
+                logger.error(f"Training failed: {e}")
+                raise
             
             logger.info("FLUX DreamBooth training completed successfully")
             return {
                 "status": "success",
-                "output": output_lines[-50:] if len(output_lines) > 50 else output_lines  # Last 50 lines
+                "output": result.stdout.splitlines()[-50:] if result.stdout else [],  # Last 50 lines
+                "error": result.stderr
             }
             
         except Exception as e:

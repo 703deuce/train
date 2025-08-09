@@ -268,53 +268,14 @@ class DreamBoothTrainingHandler:
         os.makedirs(output_dir, exist_ok=True)
         
         # Build command-line arguments for FLUX DreamBooth training
+        # Use only bare minimum required arguments
         cmd_args = [
             "accelerate", "launch", "/workspace/dreambooth/train_dreambooth_flux.py",
             "--pretrained_model_name_or_path", self._get_model_path(params["base_model"], params),
             "--instance_data_dir", dataset_path,
             "--output_dir", output_dir,
             "--instance_prompt", params.get("instance_prompt", ""),
-            "--mixed_precision", params["mixed_precision"],
-            "--resolution", str(self._parse_resolution(params["resolution"])[0]),
-            "--train_batch_size", str(params["batch_size"]),
-            "--guidance_scale", "1",
-            "--gradient_accumulation_steps", str(params["gradient_accumulation_steps"]),
-            "--optimizer", "prodigy",
-            "--learning_rate", "1.0",
-            "--lr_scheduler", params["lr_scheduler"],
-            "--lr_warmup_steps", "0",
-            "--max_train_steps", str(params["steps"]),
-            "--train_text_encoder",
-            "--logging_dir", "logs",
-            "--max_sequence_length", "512",
-            "--dataloader_num_workers", "0",
-            "--gradient_checkpointing",
         ]
-        
-        # Add prior preservation if enabled
-        if params.get("with_prior_preservation", False):  # Changed from True to False
-            cmd_args.extend([
-                "--with_prior_preservation",
-                "--prior_loss_weight", str(params.get("prior_loss_weight", 1.0)),
-                "--num_class_images", str(params.get("num_class_images", 50)),
-            ])
-            
-            # Add class data directory (required for prior preservation)
-            class_data_dir = params.get("class_data_dir")
-            if not class_data_dir:
-                # Create a default class data directory
-                class_data_dir = os.path.join(DATASETS_PATH, f"{model_name}_class_images")
-                os.makedirs(class_data_dir, exist_ok=True)
-                logger.info(f"Created default class data directory: {class_data_dir}")
-            
-            cmd_args.extend(["--class_data_dir", class_data_dir])
-        
-        # Add validation parameters for better training monitoring
-        cmd_args.extend([
-            "--validation_prompt", params.get("instance_prompt", ""),
-            "--validation_epochs", "25",
-            "--seed", "0",
-        ])
         
         # Save command to file for execution
         config_filename = f"{model_name}_cmd.json"

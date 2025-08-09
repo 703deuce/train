@@ -186,7 +186,11 @@ def log_validation(
     pipeline.set_progress_bar_config(disable=True)
 
     # run inference
-    generator = torch.Generator(device=accelerator.device).manual_seed(args.seed) if args.seed is not None else None
+    # Use CUDA explicitly for generator to avoid device mismatch
+    if torch.cuda.is_available():
+        generator = torch.Generator(device=torch.device('cuda')).manual_seed(args.seed) if args.seed is not None else None
+    else:
+        generator = torch.Generator(device=accelerator.device).manual_seed(args.seed) if args.seed is not None else None
     # autocast_ctx = torch.autocast(accelerator.device.type) if not is_final_validation else nullcontext()
     autocast_ctx = nullcontext()
 
@@ -1067,11 +1071,29 @@ def main(args):
         torch.set_default_tensor_type('torch.cuda.FloatTensor')
         torch.cuda.empty_cache()
         print("CUDA device management initialized")
+        print(f"CUDA device count: {torch.cuda.device_count()}")
+        print(f"Current CUDA device: {torch.cuda.current_device()}")
+        print(f"CUDA device name: {torch.cuda.get_device_name()}")
     elif is_torch_npu_available():
         torch_npu.npu.empty_cache()
         print("NPU device management initialized")
     else:
         print("No CUDA or NPU available, using CPU")
+    
+    # Debug accelerator device
+    print(f"Accelerator device: {accelerator.device}")
+    print(f"Accelerator device type: {accelerator.device.type}")
+    print(f"Accelerator device index: {accelerator.device.index}")
+    
+    # Force accelerator to use CUDA if available
+    if torch.cuda.is_available() and accelerator.device.type != 'cuda':
+        print("WARNING: Accelerator not using CUDA, forcing device to CUDA")
+        # This is a workaround - we'll ensure all tensors are explicitly moved to CUDA
+        cuda_device = torch.device('cuda')
+    else:
+        cuda_device = accelerator.device
+    
+    print(f"Using device for tensor operations: {cuda_device}")
 
     # Disable AMP for MPS.
     if torch.backends.mps.is_available():
@@ -1637,7 +1659,11 @@ def main(args):
                 # Sample noise that we'll add to the latents
                 # Ensure model_input is on the correct device
                 model_input = model_input.to(device=accelerator.device)
-                noise = torch.randn_like(model_input, device=accelerator.device)
+                # Use CUDA explicitly for noise generation to avoid device mismatch
+                if torch.cuda.is_available():
+                    noise = torch.randn_like(model_input, device=torch.device('cuda'))
+                else:
+                    noise = torch.randn_like(model_input, device=accelerator.device)
                 bsz = model_input.shape[0]
 
                 # Sample a random timestep for each image

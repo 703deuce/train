@@ -1,5 +1,5 @@
 # Use NVIDIA CUDA base image with Python 3.10
-FROM nvidia/cuda:12.6.2-devel-ubuntu22.04
+FROM nvidia/cuda:12.8-devel-ubuntu22.04
 
 # Set environment variables
 ENV DEBIAN_FRONTEND=noninteractive
@@ -45,7 +45,7 @@ WORKDIR /workspace/ai-toolkit
 RUN git submodule update --init --recursive
 
 # Install ai-toolkit requirements
-RUN pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+RUN pip install torch==2.7.0 torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu128
 RUN pip install -r requirements.txt
 RUN pip install --upgrade accelerate transformers diffusers huggingface_hub
 

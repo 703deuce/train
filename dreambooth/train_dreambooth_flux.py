@@ -1028,17 +1028,6 @@ def encode_prompt(
 
 
 def main(args):
-    # Initialize device management at the start
-    if torch.cuda.is_available():
-        torch.set_default_tensor_type('torch.cuda.FloatTensor')
-        torch.cuda.empty_cache()
-        logger.info("CUDA device management initialized")
-    elif is_torch_npu_available():
-        torch_npu.npu.empty_cache()
-        logger.info("NPU device management initialized")
-    else:
-        logger.warning("No CUDA or NPU available, using CPU")
-
     if args.report_to == "wandb" and args.hub_token is not None:
         raise ValueError(
             "You cannot use both --report_to=wandb and --hub_token due to a security risk of exposing your token."
@@ -1062,6 +1051,17 @@ def main(args):
         project_config=accelerator_project_config,
         kwargs_handlers=[kwargs],
     )
+
+    # Initialize device management after Accelerator is created
+    if torch.cuda.is_available():
+        torch.set_default_tensor_type('torch.cuda.FloatTensor')
+        torch.cuda.empty_cache()
+        print("CUDA device management initialized")
+    elif is_torch_npu_available():
+        torch_npu.npu.empty_cache()
+        print("NPU device management initialized")
+    else:
+        print("No CUDA or NPU available, using CPU")
 
     # Disable AMP for MPS.
     if torch.backends.mps.is_available():

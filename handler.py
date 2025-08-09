@@ -621,7 +621,9 @@ class DreamBoothTrainingHandler:
                     
                     # Try running without accelerate to see if that's the issue
                     logger.info("Trying to run script directly without accelerate...")
-                    direct_cmd = ["python", "/workspace/dreambooth/train_dreambooth_flux.py"] + cmd_args[2:]  # Skip accelerate launch
+                    # cmd_args is: ["accelerate", "launch", "/workspace/.../train_dreambooth_flux.py", <flags>]
+                    # For direct python, skip the first three items and keep only the flags
+                    direct_cmd = ["python", "/workspace/dreambooth/train_dreambooth_flux.py"] + cmd_args[3:]
                     logger.info(f"Direct command: {' '.join(direct_cmd)}")
                     
                     try:

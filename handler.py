@@ -324,6 +324,7 @@ class DreamBoothTrainingHandler:
             json.dump(cmd_args, f)
         
         logger.info(f"Command saved to {config_path}")
+        logger.info(f"Command being saved: {cmd_args}")
         return config_path
     
     def _parse_resolution(self, resolution: str) -> List[int]:
@@ -503,6 +504,7 @@ class DreamBoothTrainingHandler:
             with open(config_path, 'r') as f:
                 cmd_args = json.load(f)
             logger.info(f"Running FLUX DreamBooth command: {' '.join(cmd_args)}")
+            logger.info(f"Command loaded from file: {cmd_args}")
             
             # Validate that cmd_args is a list
             if not isinstance(cmd_args, list):

@@ -41,18 +41,6 @@ RUN pip install deepspeed==0.12.0
 # Set working directory
 WORKDIR /workspace
 
-# Clone and setup ai-toolkit
-RUN git clone https://github.com/ostris/ai-toolkit.git /workspace/ai-toolkit
-WORKDIR /workspace/ai-toolkit
-
-# Initialize submodules
-RUN git submodule update --init --recursive
-
-# Install ai-toolkit requirements
-RUN pip install torch==2.7.0 torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu128
-RUN pip install -r requirements.txt
-RUN pip install --upgrade accelerate transformers diffusers huggingface_hub
-
 # Copy our handler and requirements
 COPY requirements.txt /workspace/
 COPY handler.py /workspace/
@@ -67,9 +55,6 @@ RUN mkdir -p /workspace/datasets /workspace/outputs /workspace/configs /workspac
 
 # Set permissions
 RUN chmod +x /workspace/handler.py
-
-# Set working directory back to workspace
-WORKDIR /workspace
 
 # Set the command to run our handler
 CMD ["python", "handler.py"]

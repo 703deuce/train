@@ -25,7 +25,6 @@ logger = logging.getLogger(__name__)
 
 # Constants - Updated for RunPod network storage support
 WORKSPACE_PATH = "/workspace"
-AI_TOOLKIT_PATH = "/workspace/ai-toolkit"
 
 # Check for network storage (RunPod volume)
 NETWORK_STORAGE_PATH = "/runpod-volume"
@@ -57,13 +56,6 @@ class DreamBoothTrainingHandler:
     def setup_environment(self):
         """Setup the training environment"""
         try:
-            # Change to ai-toolkit directory if it exists
-            if os.path.exists(AI_TOOLKIT_PATH):
-                os.chdir(AI_TOOLKIT_PATH)
-                logger.info(f"Changed directory to {AI_TOOLKIT_PATH}")
-            else:
-                logger.warning(f"AI-Toolkit path {AI_TOOLKIT_PATH} not found")
-            
             # Log storage paths
             logger.info(f"Datasets path: {DATASETS_PATH}")
             logger.info(f"Output path: {OUTPUT_PATH}")

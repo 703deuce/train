@@ -269,7 +269,7 @@ class DreamBoothTrainingHandler:
         
         # Build command-line arguments for FLUX DreamBooth training
         cmd_args = [
-            "python", "/workspace/device_fix_wrapper.py", "/workspace/train_dreambooth_flux.py",
+            "accelerate", "launch", "/workspace/train_dreambooth_flux.py",
             "--pretrained_model_name_or_path", self._get_model_path(params["base_model"], params),
             "--instance_data_dir", dataset_path,
             "--output_dir", output_dir,
@@ -526,6 +526,8 @@ class DreamBoothTrainingHandler:
             env["MKL_NUM_THREADS"] = "1"  # Limit MKL threads
             env["NUMEXPR_NUM_THREADS"] = "1"  # Limit NumExpr threads
             env["TOKENIZERS_PARALLELISM"] = "false"  # Disable tokenizer parallelism
+            env["PYTORCH_NO_CUDA_MEMORY_CACHING"] = "1"  # Disable CUDA memory caching
+            env["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"  # Consistent device ordering
             logger.info("Enhanced device management environment variables configured")
             
             # Run HuggingFace login first to ensure authentication

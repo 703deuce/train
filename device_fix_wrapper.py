@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Device Fix Wrapper for FLUX DreamBooth Training
-Comprehensive PyTorch device mismatch prevention
+Aggressive GPU-only tensor management - ALL tensors on GPU, NONE on CPU
 """
 
 import sys
@@ -18,129 +18,220 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 def patch_torch_operations():
-    """Patch PyTorch operations to automatically handle device mismatches"""
+    """Aggressively patch PyTorch operations to force ALL tensors to GPU"""
     
     # Store original methods
     original_index_select = torch.Tensor.index_select
     original_gather = torch.Tensor.gather
     original_scatter = torch.Tensor.scatter
     original_scatter_add = torch.Tensor.scatter_add
+    original_cat = torch.cat
+    original_stack = torch.stack
+    original_zeros = torch.zeros
+    original_ones = torch.ones
+    original_randn = torch.randn
+    original_rand = torch.rand
+    original_arange = torch.arange
+    original_tensor = torch.tensor
+    
+    def force_gpu_tensor(tensor):
+        """Force any tensor to GPU, regardless of current device"""
+        if tensor.device.type != 'cuda':
+            return tensor.cuda()
+        return tensor
     
     def safe_index_select(self, dim, index):
-        """Patched index_select that moves index to tensor's device"""
-        if index.device != self.device:
-            index = index.to(self.device)
-        return original_index_select(self, dim, index)
+        """Force index to GPU and ensure result is on GPU"""
+        index = force_gpu_tensor(index)
+        result = original_index_select(self, dim, index)
+        return force_gpu_tensor(result)
     
     def safe_gather(self, dim, index):
-        """Patched gather that moves index to tensor's device"""
-        if index.device != self.device:
-            index = index.to(self.device)
-        return original_gather(self, dim, index)
+        """Force index to GPU and ensure result is on GPU"""
+        index = force_gpu_tensor(index)
+        result = original_gather(self, dim, index)
+        return force_gpu_tensor(result)
     
     def safe_scatter(self, dim, index, src):
-        """Patched scatter that moves index and src to tensor's device"""
-        if index.device != self.device:
-            index = index.to(self.device)
-        if src.device != self.device:
-            src = src.to(self.device)
-        return original_scatter(self, dim, index, src)
+        """Force all tensors to GPU"""
+        index = force_gpu_tensor(index)
+        src = force_gpu_tensor(src)
+        result = original_scatter(self, dim, index, src)
+        return force_gpu_tensor(result)
     
     def safe_scatter_add(self, dim, index, src):
-        """Patched scatter_add that moves index and src to tensor's device"""
-        if index.device != self.device:
-            index = index.to(self.device)
-        if src.device != self.device:
-            src = src.to(self.device)
-        return original_scatter_add(self, dim, index, src)
+        """Force all tensors to GPU"""
+        index = force_gpu_tensor(index)
+        src = force_gpu_tensor(src)
+        result = original_scatter_add(self, dim, index, src)
+        return force_gpu_tensor(result)
+    
+    def safe_cat(tensors, dim=0, out=None):
+        """Force all tensors to GPU before concatenation"""
+        tensors = [force_gpu_tensor(t) for t in tensors]
+        result = original_cat(tensors, dim, out)
+        return force_gpu_tensor(result)
+    
+    def safe_stack(tensors, dim=0, out=None):
+        """Force all tensors to GPU before stacking"""
+        tensors = [force_gpu_tensor(t) for t in tensors]
+        result = original_stack(tensors, dim, out)
+        return force_gpu_tensor(result)
+    
+    def safe_zeros(*args, **kwargs):
+        """Always create zeros tensor on GPU"""
+        kwargs['device'] = 'cuda'
+        return original_zeros(*args, **kwargs)
+    
+    def safe_ones(*args, **kwargs):
+        """Always create ones tensor on GPU"""
+        kwargs['device'] = 'cuda'
+        return original_ones(*args, **kwargs)
+    
+    def safe_randn(*args, **kwargs):
+        """Always create random tensor on GPU"""
+        kwargs['device'] = 'cuda'
+        return original_randn(*args, **kwargs)
+    
+    def safe_rand(*args, **kwargs):
+        """Always create random tensor on GPU"""
+        kwargs['device'] = 'cuda'
+        return original_rand(*args, **kwargs)
+    
+    def safe_arange(*args, **kwargs):
+        """Always create arange tensor on GPU"""
+        kwargs['device'] = 'cuda'
+        return original_arange(*args, **kwargs)
+    
+    def safe_tensor(data, **kwargs):
+        """Always create tensor on GPU"""
+        kwargs['device'] = 'cuda'
+        return original_tensor(data, **kwargs)
     
     # Apply patches
     torch.Tensor.index_select = safe_index_select
     torch.Tensor.gather = safe_gather
     torch.Tensor.scatter = safe_scatter
     torch.Tensor.scatter_add = safe_scatter_add
+    torch.cat = safe_cat
+    torch.stack = safe_stack
+    torch.zeros = safe_zeros
+    torch.ones = safe_ones
+    torch.randn = safe_randn
+    torch.rand = safe_rand
+    torch.arange = safe_arange
+    torch.tensor = safe_tensor
     
-    logger.info("Patched PyTorch tensor operations for device safety")
+    logger.info("Aggressively patched PyTorch operations for GPU-only tensors")
 
 def patch_dataloader():
-    """Patch DataLoader to automatically move all batch tensors to CUDA"""
+    """Aggressively patch DataLoader to force ALL tensors to GPU"""
     
     original_iter = DataLoader.__iter__
     
-    def safe_iter(self):
-        """Patched DataLoader iterator that moves all tensors to CUDA"""
+    def force_gpu_iter(self):
+        """Force ALL tensors in every batch to GPU"""
         iterator = original_iter(self)
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
         for batch in iterator:
-            yield move_batch_to_device(batch, device)
+            yield force_batch_to_gpu(batch)
     
-    def move_batch_to_device(batch, device):
-        """Recursively move all tensors in a batch to the specified device"""
+    def force_batch_to_gpu(batch):
+        """Recursively force ALL tensors in batch to GPU"""
         if isinstance(batch, torch.Tensor):
-            return batch.to(device)
+            return batch.cuda() if batch.device.type != 'cuda' else batch
         elif isinstance(batch, (list, tuple)):
-            return type(batch)(move_batch_to_device(item, device) for item in batch)
+            return type(batch)(force_batch_to_gpu(item) for item in batch)
         elif isinstance(batch, dict):
-            return {key: move_batch_to_device(value, device) for key, value in batch.items()}
+            return {key: force_batch_to_gpu(value) for key, value in batch.items()}
         else:
             return batch
     
     # Apply patch
-    DataLoader.__iter__ = safe_iter
-    logger.info("Patched DataLoader for automatic device movement")
+    DataLoader.__iter__ = force_gpu_iter
+    logger.info("Aggressively patched DataLoader for GPU-only batches")
 
 def patch_collate_functions():
-    """Patch common collate functions to ensure device consistency"""
+    """Aggressively patch collate functions to force GPU-only output"""
     
-    # Patch default_collate if it exists
     try:
         from torch.utils.data._utils.collate import default_collate
         original_default_collate = default_collate
         
-        def safe_default_collate(batch):
-            """Patched default_collate that ensures CUDA device"""
+        def force_gpu_collate(batch):
+            """Force collated result to GPU"""
             result = original_default_collate(batch)
-            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-            return move_batch_to_device(result, device)
+            return force_batch_to_gpu(result)
+        
+        def force_batch_to_gpu(batch):
+            """Recursively force ALL tensors in batch to GPU"""
+            if isinstance(batch, torch.Tensor):
+                return batch.cuda() if batch.device.type != 'cuda' else batch
+            elif isinstance(batch, (list, tuple)):
+                return type(batch)(force_batch_to_gpu(item) for item in batch)
+            elif isinstance(batch, dict):
+                return {key: force_batch_to_gpu(value) for key, value in batch.items()}
+            else:
+                return batch
         
         # Replace the function in the module
         import torch.utils.data._utils.collate
-        torch.utils.data._utils.collate.default_collate = safe_default_collate
-        logger.info("Patched default_collate for device safety")
+        torch.utils.data._utils.collate.default_collate = force_gpu_collate
+        logger.info("Aggressively patched default_collate for GPU-only output")
         
     except ImportError:
         logger.warning("Could not patch default_collate - not available")
 
-def setup_device_environment():
-    """Setup optimal device environment for training"""
+def patch_tensor_creation():
+    """Patch tensor creation to always use GPU"""
     
-    # Set default tensor type to CUDA
+    # Patch torch.Tensor constructor
+    original_tensor_init = torch.Tensor.__init__
+    
+    def force_gpu_tensor_init(self, *args, **kwargs):
+        """Force new tensors to be created on GPU"""
+        kwargs['device'] = 'cuda'
+        return original_tensor_init(self, *args, **kwargs)
+    
+    torch.Tensor.__init__ = force_gpu_tensor_init
+    logger.info("Patched tensor creation for GPU-only tensors")
+
+def setup_gpu_only_environment():
+    """Setup environment to force ALL operations to GPU"""
+    
+    # Force CUDA as default device
     if torch.cuda.is_available():
         torch.set_default_tensor_type('torch.cuda.FloatTensor')
         torch.cuda.empty_cache()
+        
+        # Set environment variables to force GPU usage
+        os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+        os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
+        
         device = torch.device("cuda")
-        logger.info(f"CUDA available: {torch.cuda.get_device_name()}")
+        logger.info(f"GPU-only environment: {torch.cuda.get_device_name()}")
+        logger.info("ALL tensors will be forced to GPU")
     else:
-        device = torch.device("cpu")
-        logger.warning("CUDA not available, using CPU")
+        logger.error("CUDA not available - cannot run GPU-only training")
+        sys.exit(1)
     
     return device
 
-def run_training_with_device_fix(training_script_path, *args):
-    """Run training script with comprehensive device fixes applied"""
+def run_training_with_gpu_only_fix(training_script_path, *args):
+    """Run training script with aggressive GPU-only tensor management"""
     
-    # Setup device environment
-    device = setup_device_environment()
+    # Setup GPU-only environment
+    device = setup_gpu_only_environment()
     
-    # Apply all patches
+    # Apply all aggressive patches
     patch_torch_operations()
     patch_dataloader()
     patch_collate_functions()
+    patch_tensor_creation()
     
     # Build the command to run the training script
     cmd = [sys.executable, training_script_path] + list(args)
-    logger.info(f"Running training script: {training_script_path}")
+    logger.info(f"Running training script with GPU-only enforcement: {training_script_path}")
     logger.info(f"Command: {' '.join(cmd)}")
     
     try:
@@ -167,7 +258,7 @@ def run_training_with_device_fix(training_script_path, *args):
         if return_code != 0:
             raise subprocess.CalledProcessError(return_code, cmd)
         
-        logger.info("Training completed successfully")
+        logger.info("Training completed successfully with GPU-only tensors")
         return {
             "status": "success",
             "output": output_lines[-50:] if len(output_lines) > 50 else output_lines
@@ -178,7 +269,7 @@ def run_training_with_device_fix(training_script_path, *args):
         raise
 
 def main():
-    """Main function to run training with device fixes"""
+    """Main function to run training with aggressive GPU-only enforcement"""
     
     if len(sys.argv) < 2:
         logger.error("Usage: python device_fix_wrapper.py <training_script> [args...]")
@@ -188,8 +279,8 @@ def main():
     training_args = sys.argv[2:]
     
     try:
-        result = run_training_with_device_fix(training_script, *training_args)
-        logger.info("Training completed successfully")
+        result = run_training_with_gpu_only_fix(training_script, *training_args)
+        logger.info("Training completed successfully with GPU-only enforcement")
         sys.exit(0)
     except subprocess.CalledProcessError as e:
         logger.error(f"Training failed with exit code {e.returncode}")

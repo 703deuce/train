@@ -615,6 +615,21 @@ class DreamBoothTrainingHandler:
                 if result.returncode != 0:
                     logger.error(f"Training failed with exit code {result.returncode}")
                     logger.error(f"Command: {' '.join(cmd_args)}")
+                    
+                    # Try running without accelerate to see if that's the issue
+                    logger.info("Trying to run script directly without accelerate...")
+                    direct_cmd = ["python", "/workspace/dreambooth/train_dreambooth_flux.py"] + cmd_args[2:]  # Skip accelerate launch
+                    direct_result = subprocess.run(
+                        direct_cmd,
+                        capture_output=True,
+                        text=True,
+                        env=env,
+                        cwd="/workspace"
+                    )
+                    logger.info(f"Direct execution stdout: {direct_result.stdout}")
+                    if direct_result.stderr:
+                        logger.error(f"Direct execution stderr: {direct_result.stderr}")
+                    
                     raise subprocess.CalledProcessError(result.returncode, cmd_args)
                     
             except subprocess.CalledProcessError as e:

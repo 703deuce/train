@@ -1095,6 +1095,45 @@ def main(args):
     
     print(f"Using device for tensor operations: {cuda_device}")
 
+    # Fix for CUDA generator issues - ensure all random operations use correct device
+    if torch.cuda.is_available():
+        # Set default generator to CUDA
+        torch.manual_seed(args.seed if args.seed is not None else 42)
+        torch.cuda.manual_seed(args.seed if args.seed is not None else 42)
+        torch.cuda.manual_seed_all(args.seed if args.seed is not None else 42)
+        
+        # Patch torch.random functions to always use CUDA
+        original_randn = torch.randn
+        original_rand = torch.rand
+        original_randperm = torch.randperm
+        
+        def safe_randn(*args, **kwargs):
+            kwargs['device'] = 'cuda'
+            return original_randn(*args, **kwargs)
+        
+        def safe_rand(*args, **kwargs):
+            kwargs['device'] = 'cuda'
+            return original_rand(*args, **kwargs)
+        
+        def safe_randperm(*args, **kwargs):
+            kwargs['device'] = 'cuda'
+            return original_randperm(*args, **kwargs)
+        
+        torch.randn = safe_randn
+        torch.rand = safe_rand
+        torch.randperm = safe_randperm
+        
+        print("Set CUDA random seeds and patched torch.random functions")
+    elif is_torch_npu_available():
+        # Set default generator to NPU
+        torch.manual_seed(args.seed if args.seed is not None else 42)
+        torch_npu.manual_seed(args.seed if args.seed is not None else 42)
+        print("Set NPU random seeds and default generator")
+    else:
+        # Set CPU seeds
+        torch.manual_seed(args.seed if args.seed is not None else 42)
+        print("Set CPU random seeds")
+
     # Disable AMP for MPS.
     if torch.backends.mps.is_available():
         accelerator.native_amp = False
@@ -1414,6 +1453,18 @@ def main(args):
         collate_fn=lambda examples: collate_fn(examples, args.with_prior_preservation, device=accelerator.device),
         num_workers=args.dataloader_num_workers,
     )
+    
+    # Fix for CUDA generator issue - ensure DataLoader generator is on correct device
+    if torch.cuda.is_available():
+        # Force the DataLoader's random generator to use CUDA
+        train_dataloader.generator = torch.Generator(device='cuda')
+        print("Fixed DataLoader generator to use CUDA device")
+    elif is_torch_npu_available():
+        # Force the DataLoader's random generator to use NPU
+        train_dataloader.generator = torch.Generator(device='npu')
+        print("Fixed DataLoader generator to use NPU device")
+    else:
+        print("Using CPU generator for DataLoader")
 
     if not args.train_text_encoder:
         tokenizers = [tokenizer_one, tokenizer_two]

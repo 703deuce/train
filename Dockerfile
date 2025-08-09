@@ -49,15 +49,14 @@ RUN pip install torch torchvision --index-url https://download.pytorch.org/whl/c
 RUN pip install -r requirements.txt
 RUN pip install --upgrade accelerate transformers diffusers huggingface_hub
 
-# Download FLUX DreamBooth training script
-RUN wget https://github.com/huggingface/diffusers/raw/main/examples/dreambooth/train_dreambooth_flux.py -O /workspace/train_dreambooth_flux.py
-
 # Copy our handler and requirements
 COPY requirements.txt /workspace/
 COPY handler.py /workspace/
+COPY dreambooth/ /workspace/dreambooth/
 
-# Install our additional requirements
+# Install our additional requirements and FLUX-specific requirements
 RUN pip install -r /workspace/requirements.txt
+RUN pip install -r /workspace/dreambooth/requirements_flux.txt
 
 # Create necessary directories
 RUN mkdir -p /workspace/datasets /workspace/outputs /workspace/configs

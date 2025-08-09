@@ -269,7 +269,7 @@ class DreamBoothTrainingHandler:
         
         # Build command-line arguments for FLUX DreamBooth training
         cmd_args = [
-            "accelerate", "launch", "/workspace/train_dreambooth_flux.py",
+            "accelerate", "launch", "/workspace/dreambooth/train_dreambooth_flux.py",
             "--pretrained_model_name_or_path", self._get_model_path(params["base_model"], params),
             "--instance_data_dir", dataset_path,
             "--output_dir", output_dir,
